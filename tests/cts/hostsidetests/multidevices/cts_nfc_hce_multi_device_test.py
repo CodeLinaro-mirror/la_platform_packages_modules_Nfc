@@ -537,6 +537,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         1. Verifies a successful APDU exchange between the emulator and the
         payment service with prefix AIDs.
         """
+        asserts.skip_if(not self.emulator.nfc_emulator.isAidPrefixRegistrationSupported(),
+            "Prefix registration is not supported on device")
         self._set_up_emulator(
             start_emulator_fun=self.emulator.nfc_emulator.startPrefixPaymentEmulatorActivity,
             payment_default_service=_PREFIX_PAYMENT_SERVICE_1,
@@ -569,6 +571,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         1. Verifies a successful APDU exchange between the emulator and the
         payment service with prefix AIDs.
         """
+        asserts.skip_if(not self.emulator.nfc_emulator.isAidPrefixRegistrationSupported(),
+            "Prefix registration is not supported on device")
         self._set_up_emulator(
             start_emulator_fun=self.emulator.nfc_emulator.startPrefixPaymentEmulator2Activity,
             payment_default_service=_PREFIX_PAYMENT_SERVICE_1,
@@ -597,6 +601,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         1. Verifies successful APDU sequence exchange.
 
         """
+        asserts.skip_if(not self.emulator.nfc_emulator.isAidPrefixRegistrationSupported(),
+            "Prefix registration is not supported on device")
         self._set_up_emulator(
             start_emulator_fun=self.emulator.nfc_emulator.startDualNonPaymentPrefixEmulatorActivity)
 
@@ -904,6 +910,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         1. Verifies APDU exchange is successful between the reader and the
         selected service.
         """
+        asserts.skip_if(not self.emulator.nfc_emulator.isAidPrefixRegistrationSupported(),
+            "Prefix registration is not supported on device")
         self._set_up_emulator(
             start_emulator_fun=
                 self.emulator.nfc_emulator.startConflictingNonPaymentPrefixEmulatorActivity,
@@ -1127,7 +1135,7 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         # in order to be able to trigger ON event when the test starts
         self.pn532.mute()
 
-        # 2. Start emuator activity
+        # 2. Start emulator activity
         self._set_up_emulator(
             start_emulator_fun=self.emulator.nfc_emulator.startPollingFrameEmulatorActivity
         )
