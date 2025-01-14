@@ -146,7 +146,7 @@ void initializeNfcMuteTechRouteOptionFlag() {
 
 // Abort nfc service when AIDL process died.
 void HalAidlBinderDied(void* /* cookie */) {
-  LOG(ERROR) << __func__ << "INfc aidl hal died, exiting procces to restart";
+  LOG(ERROR) << StringPrintf("%s: INfc aidl hal died, exiting procces to restart", __func__);
   storeNfcSnoopLogs(DEFAULT_CRASH_LOGS_PATH, DEFAULT_NFCSNOOP_FILE_SIZE);
   exit(0);
 }
@@ -611,7 +611,7 @@ void NfcAdaptation::Finalize() {
 
   NfcConfig::clear();
 
-  if (mAidlHal != nullptr) {
+  if (mAidlHal != nullptr && AIBinder_isAlive(mAidlHal->asBinder().get())) {
     AIBinder_unlinkToDeath(mAidlHal->asBinder().get(), mDeathRecipient.get(),
                            nullptr);
   } else if (mHal != nullptr) {
@@ -632,7 +632,7 @@ void NfcAdaptation::FactoryReset() {
 }
 
 void NfcAdaptation::DeviceShutdown() {
-  if (mAidlHal != nullptr) {
+  if (mAidlHal != nullptr && AIBinder_isAlive(mAidlHal->asBinder().get())) {
     mAidlHal->close(NfcCloseType::HOST_SWITCHED_OFF);
     AIBinder_unlinkToDeath(mAidlHal->asBinder().get(), mDeathRecipient.get(),
                            nullptr);

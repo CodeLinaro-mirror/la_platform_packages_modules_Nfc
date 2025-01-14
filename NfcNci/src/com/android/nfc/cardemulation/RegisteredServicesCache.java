@@ -29,6 +29,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManager.ResolveInfoFlags;
@@ -503,18 +504,19 @@ public class RegisteredServicesCache {
             }
         }
 
+        // Add NDEF-NFCEE AID
+        /** TODO: b/388667146: Fix this NDEF-NFCEE AID routing issue later.
         if (DEBUG) {
             Log.d(
                     TAG,
                     "getInstalledServices() - Adding service for routing of NDEF-NFCEE AID");
         }
-
-        // Add NDEF-NFCEE AID
         ResolveInfo ndefNfceeAppInfo = new ResolveInfo();
         ndefNfceeAppInfo.resolvePackageName = "NdefNfceeAidRoute";
         ndefNfceeAppInfo.serviceInfo = new ServiceInfo();
         ndefNfceeAppInfo.serviceInfo.packageName = "com.android.nfc.ndef_nfcee";
         ndefNfceeAppInfo.serviceInfo.name = "com.android.nfc.ndef_nfcee.NdefNfceeService";
+        ndefNfceeAppInfo.serviceInfo.applicationInfo = new ApplicationInfo();
         List<String> ndefNfceeAid = new ArrayList<String>();
         ndefNfceeAid.add(DEFAULT_T4T_NFCEE_AID);
         AidGroup ndefNfceeAidGroup = new AidGroup(ndefNfceeAid, "other");
@@ -534,7 +536,7 @@ public class RegisteredServicesCache {
                 "Ndef-Nfcee",
                 "Ndef-Nfcee");
         validServices.add(ndefNfceeAidService);
-
+        */
         return validServices;
     }
 

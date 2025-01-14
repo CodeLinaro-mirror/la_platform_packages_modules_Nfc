@@ -58,6 +58,7 @@ import android.view.KeyEvent;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 
+import com.android.compatibility.common.util.ApiTest;
 import com.android.compatibility.common.util.CommonTestUtils;
 import com.android.compatibility.common.util.SystemUtil;
 
@@ -666,6 +667,11 @@ public class CardEmulationTest {
         android.nfc.Flags.FLAG_NFC_OBSERVE_MODE,
         android.nfc.Flags.FLAG_NFC_EVENT_LISTENER
     })
+    @ApiTest(
+            apis = {
+                "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onObserveModeStateChanged",
+                "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onPreferredServiceChanged"
+            })
     public void testEventListener() throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
@@ -736,6 +742,11 @@ public class CardEmulationTest {
         android.nfc.Flags.FLAG_NFC_EVENT_LISTENER,
         android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED
     })
+    @ApiTest(
+            apis = {
+                "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onObserveModeStateChanged",
+                "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onPreferredServiceChanged"
+            })
     public void testEventListener_WalletHolderToForegroundAndBack() throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
@@ -869,6 +880,10 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled({android.nfc.Flags.FLAG_NFC_EVENT_LISTENER})
+    @ApiTest(
+        apis = {
+            "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onNfcStateChanged"
+        })
     public void testEventListener_stateChange() throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
