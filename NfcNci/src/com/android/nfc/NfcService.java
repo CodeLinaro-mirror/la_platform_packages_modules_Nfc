@@ -1803,22 +1803,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             sToast_debounce = false;
 
-            int pollTech = -1;
-            if (mPrefs.contains(PREF_POLL_TECH)) {
-                pollTech = getNfcPollTech();
-            }
-            int listenTech = -1;
-            if (mPrefs.contains(PREF_LISTEN_TECH)) {
-                listenTech = getNfcListenTech();
-            }
-            if (listenTech == -1 || listenTech == DEFAULT_LISTEN_TECH)
-                listenTech = (NfcAdapter.FLAG_LISTEN_KEEP|NfcAdapter.FLAG_USE_ALL_TECH);
-
-            if (pollTech == -1 || pollTech == DEFAULT_POLL_TECH)
-                pollTech = (NfcAdapter.FLAG_READER_KEEP|NfcAdapter.FLAG_USE_ALL_TECH);
-
-            mDeviceHost.setDiscoveryTech(pollTech|NfcAdapter.FLAG_SET_DEFAULT_TECH,
-                             listenTech|NfcAdapter.FLAG_SET_DEFAULT_TECH);
+            restoreSavedTech();
 
             /* Skip applyRouting if always on state is switching */
             if (!mIsAlwaysOnSupported
@@ -2044,6 +2029,40 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    private void clearListenTech(boolean keepListenTech) {
+        if(getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+            int listenTech = -1;
+            if (keepListenTech) {
+                Log.d(TAG, "keep listenTech");
+                listenTech = NfcAdapter.FLAG_LISTEN_KEEP;
+            } else {
+                Log.d(TAG, "clear listenTech");
+                listenTech = (NfcAdapter.FLAG_LISTEN_KEEP | NfcAdapter.FLAG_USE_ALL_TECH
+                    | NfcAdapter.FLAG_SET_DEFAULT_TECH);
+            }
+            mDeviceHost.setDiscoveryTech(NfcAdapter.FLAG_READER_KEEP, listenTech);
+        }
+    }
+
+    private void restoreSavedTech() {
+        Log.i(TAG, "restoreSavedTech");
+        int pollTech = -1;
+        if (mPrefs.contains(PREF_POLL_TECH)) {
+            pollTech = getNfcPollTech();
+        }
+        int listenTech = -1;
+        if (mPrefs.contains(PREF_LISTEN_TECH)) {
+            listenTech = getNfcListenTech();
+        }
+        if (listenTech == -1 || listenTech == DEFAULT_LISTEN_TECH)
+            listenTech = (NfcAdapter.FLAG_LISTEN_KEEP|NfcAdapter.FLAG_USE_ALL_TECH);
+
+        if (pollTech == -1 || pollTech == DEFAULT_POLL_TECH)
+            pollTech = (NfcAdapter.FLAG_READER_KEEP|NfcAdapter.FLAG_USE_ALL_TECH);
+
+        mDeviceHost.setDiscoveryTech(pollTech|NfcAdapter.FLAG_SET_DEFAULT_TECH,
+                listenTech|NfcAdapter.FLAG_SET_DEFAULT_TECH);
+    }
 
     public void playSound(int sound) {
         synchronized (this) {
@@ -2082,11 +2101,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 StopPresenceChecking();
                 // listenTech is different from the default value, the stored listenTech will be included.
                 // When using enableReaderMode, change listenTech to default & restore to the previous value.
-                if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
-                    Log.d(TAG, "Restore listenTech to saved value");
-                    int pollTech = getNfcPollTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
-                    int listenTech = getNfcListenTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
-                    mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                if (isNfcEnabled()) {
+                    restoreSavedTech();
                 }
                 mNfcEventLog.logEvent(
                         NfcEventProto.EventType.newBuilder()
@@ -2762,15 +2778,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         }
                         // listenTech is different from the default value, the stored listenTech will be included.
                         // When using setReaderMode, change listenTech to default & restore to previous value.
-                        if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
-                            Log.d(TAG, "Change listenTech to default value");
-                            int pollTech = (NfcAdapter.FLAG_READER_KEEP |
-                                NfcAdapter.FLAG_USE_ALL_TECH | NfcAdapter.FLAG_SET_DEFAULT_TECH);
-                            int listenTech = (NfcAdapter.FLAG_LISTEN_KEEP |
-                                NfcAdapter.FLAG_USE_ALL_TECH | NfcAdapter.FLAG_SET_DEFAULT_TECH);
-                            if(disablePolling)
-                                listenTech &= ~NfcAdapter.FLAG_USE_ALL_TECH;
-                            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        if (isNfcEnabled()) {
+                            clearListenTech(disablePolling);
                         }
                         updateReaderModeParams(callback, flags, extras, binder, callingUid);
                     } catch (RemoteException e) {
@@ -2798,11 +2807,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     } finally {
                         // listenTech is different from the default value, the stored listenTech will be included.
                         // When using enableReaderMode, change listenTech to default & restore to the previous value.
-                        if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
-                            Log.d(TAG, "Restore listenTech to saved value");
-                            int pollTech = getNfcPollTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
-                            int listenTech = getNfcListenTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
-                            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        if (isNfcEnabled()) {
+                            restoreSavedTech();
                         }
                     }
                 }
@@ -5044,7 +5050,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         mCardEmulationManager.onOffHostAidSelected();
                     }
                     byte[][] data = (byte[][]) msg.obj;
-                    sendOffHostTransactionEvent(data[0], data[1], data[2]);
+                    synchronized (NfcService.this) {
+                        sendOffHostTransactionEvent(data[0], data[1], data[2]);
+                    }
                     break;
 
                 case MSG_SE_SELECTED_EVENT:
@@ -5255,57 +5263,60 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         /* Returns the list of packages request for nfc preferred payment service changed and
          * have access to NFC Events on any SE */
         private ArrayList<String> getNfcPreferredPaymentChangedSEAccessAllowedPackages(int userId) {
-            if (!isSEServiceAvailable()
-                    || mNfcPreferredPaymentChangedInstalledPackages.get(userId).isEmpty()) {
-                return null;
-            }
-            String[] readers = null;
-            try {
-                readers = mSEService.getReaders();
-            } catch (RemoteException e) {
-                Log.e(TAG, "Error in getReaders() " + e);
-                return null;
-            }
-
-            if (readers == null || readers.length == 0) {
-                return null;
-            }
-            boolean[] nfcAccessFinal = null;
-            List<String> packagesOfUser = mNfcPreferredPaymentChangedInstalledPackages.get(userId);
-            String[] installedPackages = new String[packagesOfUser.size()];
-
-            for (String reader : readers) {
+            synchronized (NfcService.this) {
+                if (!isSEServiceAvailable()
+                        || mNfcPreferredPaymentChangedInstalledPackages.get(userId).isEmpty()) {
+                    return null;
+                }
+                String[] readers = null;
                 try {
-                    boolean[] accessList = mSEService.isNfcEventAllowed(reader, null,
-                            packagesOfUser.toArray(installedPackages), userId
-                            );
-                    if (accessList == null) {
-                        continue;
-                    }
-                    if (nfcAccessFinal == null) {
-                        nfcAccessFinal = accessList;
-                    }
-                    for (int i = 0; i < accessList.length; i++) {
-                        if (accessList[i]) {
-                            nfcAccessFinal[i] = true;
-                        }
-                    }
+                    readers = mSEService.getReaders();
                 } catch (RemoteException e) {
-                    Log.e(TAG, "Error in isNfcEventAllowed() " + e);
-                } catch (IllegalArgumentException e) {
-                    Log.e(TAG, "Error " + e);
+                    Log.e(TAG, "Error in getReaders() " + e);
+                    return null;
                 }
-            }
-            if (nfcAccessFinal == null) {
-                return null;
-            }
-            ArrayList<String> packages = new ArrayList<String>();
-            for (int i = 0; i < nfcAccessFinal.length; i++) {
-                if (nfcAccessFinal[i]) {
-                    packages.add(packagesOfUser.get(i));
+
+                if (readers == null || readers.length == 0) {
+                    return null;
                 }
+                boolean[] nfcAccessFinal = null;
+                List<String> packagesOfUser =
+                      mNfcPreferredPaymentChangedInstalledPackages.get(userId);
+                String[] installedPackages = new String[packagesOfUser.size()];
+
+                for (String reader : readers) {
+                    try {
+                        boolean[] accessList = mSEService.isNfcEventAllowed(reader, null,
+                                packagesOfUser.toArray(installedPackages), userId
+                                );
+                        if (accessList == null) {
+                            continue;
+                        }
+                        if (nfcAccessFinal == null) {
+                            nfcAccessFinal = accessList;
+                        }
+                        for (int i = 0; i < accessList.length; i++) {
+                            if (accessList[i]) {
+                                nfcAccessFinal[i] = true;
+                            }
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Error in isNfcEventAllowed() " + e);
+                    } catch (IllegalArgumentException e) {
+                        Log.e(TAG, "Error " + e);
+                    }
+                }
+                if (nfcAccessFinal == null) {
+                    return null;
+                }
+                ArrayList<String> packages = new ArrayList<String>();
+                for (int i = 0; i < nfcAccessFinal.length; i++) {
+                    if (nfcAccessFinal[i]) {
+                        packages.add(packagesOfUser.get(i));
+                    }
+                }
+                return packages;
             }
-            return packages;
         }
 
         private boolean isSystemApp(ApplicationInfo applicationInfo) {
@@ -5915,8 +5926,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             pw.println("mIsPowerSavingModeEnabled=" + mIsPowerSavingModeEnabled);
             pw.println("mIsObserveModeSupported=" + mNfcAdapter.isObserveModeSupported());
             pw.println("mIsObserveModeEnabled=" + mNfcAdapter.isObserveModeEnabled());
-            pw.println("listenTech=" + getNfcListenTech());
-            pw.println("pollTech=" + getNfcPollTech());
+            pw.println("listenTech=0x" + Integer.toHexString(getNfcListenTech()));
+            pw.println("pollTech=0x" + Integer.toHexString(getNfcPollTech()));
             pw.println(mCurrentDiscoveryParameters);
             if (mIsHceCapable) {
                 mCardEmulationManager.dump(fd, pw, args);
@@ -6011,3 +6022,4 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
 }
+
