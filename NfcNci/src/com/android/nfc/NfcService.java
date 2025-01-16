@@ -239,6 +239,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_UPDATE_SYSTEM_CODE_ROUTE = 26;
     static final int MSG_PREFERRED_SIM_CHANGED = 27;
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
+    static final int MSG_RESTART_DISCOVERY = 28;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -864,6 +865,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onSeSelected() {
         sendMessage(NfcService.MSG_SE_SELECTED_EVENT, null);
+    }
+
+    @Override
+    public void onRestartRfDiscovery() {
+        sendMessage(NfcService.MSG_RESTART_DISCOVERY, null);
     }
 
     /**
@@ -5122,6 +5128,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (DBG) Log.d(TAG, "Preferred sim changed");
                     new EnableDisableTask().execute(TASK_DISABLE);
                     new EnableDisableTask().execute(TASK_ENABLE);
+                    break;
+                case MSG_RESTART_DISCOVERY:
+                    mDeviceHost.restartRfDiscovery();
                     break;
                 default:
                     Log.e(TAG, "Unknown message received");
