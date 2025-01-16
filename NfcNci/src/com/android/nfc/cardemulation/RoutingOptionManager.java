@@ -120,6 +120,8 @@ public class RoutingOptionManager {
     }
 
     SimSettings mPreferredSimSettings;
+
+    int mMepMode;
     @VisibleForTesting
     native int doGetDefaultRouteDestination();
     @VisibleForTesting
@@ -136,6 +138,7 @@ public class RoutingOptionManager {
     native byte[] doGetOffHostEseDestination();
     @VisibleForTesting
     native int doGetAidMatchingMode();
+    native int doGetEuiccMepMode();
 
     public static RoutingOptionManager getInstance() {
         return RoutingOptionManager.Singleton.INSTANCE;
@@ -166,6 +169,7 @@ public class RoutingOptionManager {
 
         mPreferredSimSettings = new SimSettings((mOffHostRouteUicc != null) ?
                 mOffHostRouteUicc.length : 0, 1);
+        mMepMode = doGetEuiccMepMode();
         createLookUpTable();
     }
 
@@ -304,6 +308,8 @@ public class RoutingOptionManager {
     public int getAidMatchingSupport() {
         return mAidMatchingSupport;
     }
+
+    public int getMepMode() { return mMepMode;}
 
     public boolean isRoutingTableOverrided() {
         return mOverrideDefaultRoute != ROUTE_UNKNOWN

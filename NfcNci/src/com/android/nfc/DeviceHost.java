@@ -65,6 +65,11 @@ public interface DeviceHost {
         public void onCommandTimeout();
 
         public void onEndpointRemoved(int reason);
+
+        /**
+         * On Restart Rf Discovery
+         */
+        void onRestartRfDiscovery();
     }
 
     public interface TagEndpoint {
@@ -320,4 +325,8 @@ public interface DeviceHost {
      */
     public Map<String, Integer> dofetchActiveNfceeList();
     public boolean isRemovalDetectionInPollModeSupported();
+    /**
+     * Restarts RF Discovery
+     */
+    void restartRfDiscovery();
 }
