@@ -46,6 +46,7 @@ java_defaults {
         "PlatformProperties",
         "nfc-event-log-proto",
         "com.android.nfc.flags-aconfig-java",
+        "com.android.permission.flags-aconfig-java-export",
     ],
     flags_packages: [
         "com.android.nfc.flags-aconfig",

@@ -36,6 +36,7 @@ import android.nfc.INfcFCardEmulation;
 import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcOemExtension;
+import android.nfc.PackageAndUser;
 import android.nfc.cardemulation.AidGroup;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
@@ -59,6 +60,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -150,6 +152,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     private final NfcEventLog mNfcEventLog;
     private final int mVendorApiLevel;
     private PreferredSubscriptionService mPreferredSubscriptionService = null;
+    private TelephonyUtils mTelephonyUtils = null;
 
     // TODO: Move this object instantiation and dependencies to NfcInjector.
     public CardEmulationManager(Context context, NfcInjector nfcInjector,
@@ -166,6 +169,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mOffHostRouteEse = mRoutingOptionManager.getOffHostRouteEse();
         mOffHostRouteUicc = mRoutingOptionManager.getOffHostRouteUicc();
         mRoutingOptionManager.readRoutingOptionsFromPrefs(mContext, deviceConfigFacade);
+
+        mTelephonyUtils = TelephonyUtils.getInstance(mContext);
+        mTelephonyUtils.setMepMode(mRoutingOptionManager.getMepMode());
 
         mAidCache = new RegisteredAidCache(context, mWalletRoleObserver);
         mT3tIdentifiersCache = new RegisteredT3tIdentifiersCache(context);
@@ -240,8 +246,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mForegroundUid = Process.INVALID_UID;
         if (mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
             int currentUser = ActivityManager.getCurrentUser();
-            onWalletRoleHolderChanged(
-                    mWalletRoleObserver.getDefaultWalletRoleHolder(currentUser), currentUser);
+            PackageAndUser roleHolder =
+                    mWalletRoleObserver.getDefaultWalletRoleHolder(currentUser);
+            onWalletRoleHolderChanged(roleHolder.getPackage(),
+                    roleHolder.getUserId());
         }
 
         if (android.nfc.Flags.nfcEventListener()) {
@@ -726,8 +734,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 return false;
             }
             if (mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
-                return service.getPackageName()
-                        .equals(mWalletRoleObserver.getDefaultWalletRoleHolder(userId));
+                PackageAndUser holder =
+                        mWalletRoleObserver.getDefaultWalletRoleHolder(userId);
+                if (holder.getPackage() == null) {
+                    return false;
+                }
+                return service.getPackageName().equals(
+                        holder.getPackage()) && userId == holder.getUserId();
             }
             ComponentName defaultService =
                     getDefaultServiceForCategory(userId, category, true);
@@ -1097,8 +1110,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         public boolean isDefaultPaymentRegistered() throws RemoteException {
             if (mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
                 int callingUserId = Binder.getCallingUserHandle().getIdentifier();
-                return mWalletRoleObserver
-                        .getDefaultWalletRoleHolder(callingUserId) != null;
+                return mWalletRoleObserver.getDefaultWalletRoleHolder(
+                        callingUserId).getPackage() != null;
             }
             String defaultComponent = Settings.Secure.getString(mContext.getContentResolver(),
                     Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
@@ -1553,8 +1566,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         if (DBG) Log.d(TAG, "Assign SWP for eSIM before NFC turned on");
 
         int preferredSubscriptionId = mPreferredSubscriptionService.getPreferredSubscriptionId();
-        String response = TelephonyUtils.getInstance(mContext)
-                .updateSwpStatusForEuicc(getSimTypeById(preferredSubscriptionId));
+        String response =
+                mTelephonyUtils.updateSwpStatusForEuicc(getSimTypeById(preferredSubscriptionId));
         Log.d(TAG, "response: " + response);
         if(response.length() >= 4) {
             String statusWord = response.substring(response.length() - 4);
@@ -1567,8 +1580,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     private int getSimTypeById(int subscriptionId) {
-        Optional<SubscriptionInfo> optionalInfo  =
-                TelephonyUtils.getInstance(mContext).getActiveSubscriptionInfoById(subscriptionId);
+        Optional<SubscriptionInfo> optionalInfo =
+                mTelephonyUtils.getActiveSubscriptionInfoById(subscriptionId);
         if (optionalInfo.isPresent()) {
             SubscriptionInfo info = optionalInfo.get();
             if (info.isEmbedded()) {

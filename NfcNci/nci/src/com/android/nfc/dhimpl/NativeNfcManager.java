@@ -421,6 +421,13 @@ public class NativeNfcManager implements DeviceHost {
         doDump(fd);
     }
 
+    private native void doRestartRfDiscovery();
+
+    @Override
+    public void restartRfDiscovery() {
+        doRestartRfDiscovery();
+    }
+
     private native boolean doSetNfcSecure(boolean enable);
 
     @Override
@@ -710,4 +717,8 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native boolean isRemovalDetectionInPollModeSupported();
+
+    public void onRestartRfDiscovery() {
+        mListener.onRestartRfDiscovery();
+    }
 }
