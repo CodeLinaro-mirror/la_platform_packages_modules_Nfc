@@ -504,13 +504,13 @@ public class RegisteredServicesCache {
             }
         }
 
+        // Add NDEF-NFCEE AID
+        /** TODO: b/388667146: Fix this NDEF-NFCEE AID routing issue later.
         if (DEBUG) {
             Log.d(
                     TAG,
                     "getInstalledServices() - Adding service for routing of NDEF-NFCEE AID");
         }
-
-        // Add NDEF-NFCEE AID
         ResolveInfo ndefNfceeAppInfo = new ResolveInfo();
         ndefNfceeAppInfo.resolvePackageName = "NdefNfceeAidRoute";
         ndefNfceeAppInfo.serviceInfo = new ServiceInfo();
@@ -536,7 +536,7 @@ public class RegisteredServicesCache {
                 "Ndef-Nfcee",
                 "Ndef-Nfcee");
         validServices.add(ndefNfceeAidService);
-
+        */
         return validServices;
     }
 
