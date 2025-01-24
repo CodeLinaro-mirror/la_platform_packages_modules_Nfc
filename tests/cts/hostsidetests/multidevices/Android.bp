@@ -25,7 +25,7 @@ python_defaults {
         "platform-test-py-annotations",
     ],
     test_suites: [
-        "cts-interactive",
+        "cts-v-host",
         "general-tests",
     ],
     version: {
