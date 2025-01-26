@@ -325,11 +325,12 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
     def on_fail(self, record):
         if self.user_params.get('take_bug_report_on_fail', False):
             test_name = record.test_name
-            self.emulator.take_bug_report(
-                test_name=self.emulator.debug_tag + "_" + test_name,
-                destination=self.current_test_info.output_path,
-            )
-            if self.pn532 is None:
+            if hasattr(self, 'emulator') and hasattr(self.emulator, 'nfc_emulator'):
+                self.emulator.take_bug_report(
+                    test_name=self.emulator.debug_tag + "_" + test_name,
+                    destination=self.current_test_info.output_path,
+                )
+            if hasattr(self, 'reader') and hasattr(self.reader, 'nfc_reader'):
                 self.reader.take_bug_report(
                     test_name=self.reader.debug_tag + "_" + test_name,
                     destination=self.current_test_info.output_path,
@@ -389,6 +390,41 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             is_payment=True,
             payment_default_service=_PAYMENT_SERVICE_1
         )
+
+        self._set_up_reader_and_assert_transaction(
+            expected_service=_PAYMENT_SERVICE_1,
+            start_reader_fun=self.reader.nfc_reader.startSinglePaymentReaderActivity if not
+            self.pn532 else None)
+
+    @CddTest(requirements = ["7.4.4/C-2-2", "7.4.4/C-1-2", "9.1/C-0-1"])
+    def test_single_payment_service_with_background_app(self):
+        """Tests successful APDU exchange between payment service and
+        reader.
+
+        Test Steps:
+        1. Set callback handler on emulator for when the instrumentation app is
+        set to default wallet app.
+        2. Start emulator activity and wait for the role to be set.
+        3. Set callback handler on emulator for when a TestPass event is
+        received.
+        4. Move emulator activity to the background by sending a Home key event.
+        5. Start reader activity, which should trigger APDU exchange between
+        reader and emulator.
+
+        Verifies:
+        1. Verifies emulator device sets the instrumentation emulator app to the
+        default wallet app.
+        2. Verifies a successful APDU exchange between the emulator and
+        Transport Service after _NFC_TIMEOUT_SEC.
+        """
+        self._set_up_emulator(
+            service_list=[_PAYMENT_SERVICE_1],
+            expected_service=_PAYMENT_SERVICE_1,
+            is_payment=True,
+            payment_default_service=_PAYMENT_SERVICE_1
+        )
+
+        self.emulator.nfc_emulator.pressHome()
 
         self._set_up_reader_and_assert_transaction(
             expected_service=_PAYMENT_SERVICE_1,
@@ -1144,7 +1180,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
 
         # 1. Mute the field before starting the emulator
         # in order to be able to trigger ON event when the test starts
-        self.pn532.mute()
+        if self.pn532:
+            self.pn532.mute()
 
         # 2. Start emulator activity
         self._set_up_emulator(
@@ -1269,7 +1306,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         asserts.skip_if(not self.emulator.nfc_emulator.isObserveModeSupported(),
                     "Skipping polling frame gain test, observe mode not supported")
 
-        self.pn532.mute()
+        if self.pn532:
+            self.pn532.mute()
         emulator = self.emulator.nfc_emulator
 
         self._set_up_emulator(
@@ -1350,7 +1388,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         """
         asserts.skip_if(not self.emulator.nfc_emulator.isObserveModeSupported(),
                     "Skipping polling frame type test, observe mode not supported")
-        self.pn532.mute()
+        if self.pn532:
+            self.pn532.mute()
         emulator = self.emulator.nfc_emulator
 
         self._set_up_emulator(
@@ -1401,7 +1440,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         """
         asserts.skip_if(not self.emulator.nfc_emulator.isObserveModeSupported(),
                     "Skipping polling frame data test, observe mode not supported")
-        self.pn532.mute()
+        if self.pn532:
+            self.pn532.mute()
         emulator = self.emulator.nfc_emulator
 
         self._set_up_emulator(
