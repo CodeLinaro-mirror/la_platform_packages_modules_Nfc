@@ -190,15 +190,15 @@ public interface DeviceHost {
 
     /**
      * Write the data into the NDEF NFCEE file of the specific file ID
-     * @param fileId
-     * @param data
+     * @param fileId file id to write to
+     * @param data data to write
      * @return number of data bytes written
      */
     int doWriteData(byte[] fileId, byte[] data);
 
     /**
      * Read the data from the NDEF NFCEE file of the specific file ID.
-     * @param fileId
+     * @param fileId file id to read from
      * @return read data buffer
      */
     byte[] doReadData(byte[] fileId);
@@ -221,6 +221,12 @@ public interface DeviceHost {
      * @return "True" when feature supported. else "False"
      */
     boolean isNdefNfceeEmulationSupported();
+
+    /**
+     * This API will tell whether T4T_NFCEE_ENABLE is declared in the HAL configuration file.
+     * @return "True" when declare, else "False"
+     */
+    boolean isNdefNfceefeatureEnabled();
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 
