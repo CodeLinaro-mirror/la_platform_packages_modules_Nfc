@@ -57,19 +57,10 @@ bool phNfcExtn_LibSetup() {
   return true;
 }
 
-bool NfcVendorExtn::Initialize(sp<INfc> hidlHal,
-                               std::shared_ptr<INfcAidl> aidlHal) {
+bool NfcVendorExtn::Initialize(VendorExtnCb vendorExtnCb) {
   LOG(VERBOSE) << StringPrintf("%s:", __func__);
-  mVendorExtnCb.hidlHal = hidlHal;
-  mVendorExtnCb.aidlHal = aidlHal;
+  mVendorExtnCb = vendorExtnCb;
   return phNfcExtn_LibSetup();
-}
-
-void NfcVendorExtn::setNciCallback(tHAL_NFC_CBACK* pHalCback,
-                                   tHAL_NFC_DATA_CBACK* pDataCback) {
-  LOG(VERBOSE) << StringPrintf("%s:", __func__);
-  mVendorExtnCb.pHalCback = pHalCback;
-  mVendorExtnCb.pDataCback = pDataCback;
 }
 
 bool NfcVendorExtn::processCmd(uint16_t dataLen, uint8_t* pData) {
@@ -90,13 +81,10 @@ bool NfcVendorExtn::processEvent(uint8_t event, uint8_t status) {
   return true;
 }
 
-void NfcVendorExtn::getVendorConfigs(
-    std::map<std::string, ConfigValue>* pConfigMap) {
+void NfcVendorExtn::getVendorConfigs(VendorExtnConfig vndExtConfig) {
   LOG(VERBOSE) << StringPrintf("%s:", __func__);
-  mVendorExtnCb.configMap = *pConfigMap;
+  mVendorExtnConfig = vndExtConfig;
 }
-
-VendorExtnCb* NfcVendorExtn::getVendorExtnCb() { return &mVendorExtnCb; }
 
 bool NfcVendorExtn::finalize(void) {
   LOG(VERBOSE) << StringPrintf("%s:", __func__);

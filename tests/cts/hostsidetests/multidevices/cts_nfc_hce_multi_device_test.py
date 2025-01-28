@@ -47,6 +47,7 @@ from mobly import test_runner
 from mobly import utils
 from mobly.controllers import android_device
 from mobly.controllers import android_device_lib
+from mobly.controllers.android_device_lib import adb
 from mobly.snippet import errors
 
 
@@ -247,7 +248,6 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             self.emulator.load_snippet(
                 'nfc_emulator', 'com.android.nfc.emulator'
             )
-            self.emulator.adb.shell(['svc', 'nfc', 'enable'])
             self.emulator.debug_tag = 'emulator'
             if (
                 not self.emulator.nfc_emulator.isNfcSupported() or
@@ -256,7 +256,11 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
                 self._setup_failure_reason = f'NFC is not supported on {self.emulator}'
                 self._setup_failure_should_block_tests = False
                 return
-
+            try:
+                self.emulator.adb.shell(['svc', 'nfc', 'enable'])
+            except adb.AdbError:
+                _LOG.info("Could not enable nfc through adb.")
+                self.emulator.nfc_emulator.setNfcState(True)
             if (
                 hasattr(self.emulator, 'dimensions')
                 and 'pn532_serial_path' in self.emulator.dimensions
