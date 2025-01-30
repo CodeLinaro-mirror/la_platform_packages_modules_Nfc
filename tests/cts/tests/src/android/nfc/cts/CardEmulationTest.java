@@ -492,20 +492,23 @@ public class CardEmulationTest {
             }
         }
 
+        ArrayList<EventLogEntry> mEvents = new ArrayList<EventLogEntry>();
+
         EventPollLoopReceiver(Context context) {
-          this(context, true);
+          this(context, false);
         }
 
         EventPollLoopReceiver(Context context, boolean shouldBroadcastToRemoteEventListener) {
             super(new ArrayList<>(), null);
             mContext = context;
-            ExecutorService pool = Executors.newFixedThreadPool(2);
-            NfcAdapter adapter = NfcAdapter.getDefaultAdapter(context);
-            CardEmulation cardEmulation = CardEmulation.getInstance(adapter);
-            cardEmulation.registerNfcEventCallback(pool, this);
 
             if (shouldBroadcastToRemoteEventListener) {
                 broadcastToRemoteEventListener();
+            } else {
+                ExecutorService pool = Executors.newFixedThreadPool(2);
+                NfcAdapter adapter = NfcAdapter.getDefaultAdapter(context);
+                CardEmulation cardEmulation = CardEmulation.getInstance(adapter);
+                cardEmulation.registerNfcEventCallback(pool, this);
             }
         }
 
@@ -552,8 +555,6 @@ public class CardEmulationTest {
                             "com.android.test.walletroleholder.WalletRoleBroadcastReceiver"));
             mContext.sendBroadcast(intent);
         }
-
-        ArrayList<EventLogEntry> mEvents = new ArrayList<EventLogEntry>();
 
         @Override
         public void onObserveModeStateChanged(boolean isEnabled) {
@@ -755,7 +756,7 @@ public class CardEmulationTest {
         EventPollLoopReceiver eventPollLoopReceiver = new EventPollLoopReceiver(mContext);
         sCurrentPollLoopReceiver = eventPollLoopReceiver;
         EventPollLoopReceiver walletRolePollLoopReceiver =
-                new EventPollLoopReceiver(mContext);
+                new EventPollLoopReceiver(mContext, true);
         sWalletRolePollLoopReceiver = walletRolePollLoopReceiver;
 
         final int startingEvents = eventPollLoopReceiver.mEvents.size();
@@ -791,9 +792,9 @@ public class CardEmulationTest {
                                 "Didn't receive event",
                                 numWalletEvents < walletRolePollLoopReceiver.mEvents.size());
 
-                        EventPollLoopReceiver.EventLogEntry gainedEvent =
-                                walletRolePollLoopReceiver.mEvents.getLast();
                         EventPollLoopReceiver.EventLogEntry lostEvent =
+                                walletRolePollLoopReceiver.mEvents.getLast();
+                        EventPollLoopReceiver.EventLogEntry gainedEvent =
                                 eventPollLoopReceiver.mEvents.getLast();
 
                         Assert.assertEquals(WALLET_HOLDER_PACKAGE_NAME,
@@ -2241,18 +2242,17 @@ public class CardEmulationTest {
     private List<PollingFrame> notifyPollingLoopAndWait(
             ArrayList<PollingFrame> frames, String serviceName) {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
+        PollLoopReceiver pollLoopReceiver = new PollLoopReceiver(frames, serviceName);
         boolean receiveFromWalletRoleHoder =
                 getWalletRoleHolderService().getClassName().equals(serviceName);
         if (receiveFromWalletRoleHoder) {
-            sWalletRolePollLoopReceiver = new PollLoopReceiver(frames, serviceName);
+            sWalletRolePollLoopReceiver = pollLoopReceiver;
         } else {
-            sCurrentPollLoopReceiver = new PollLoopReceiver(frames, serviceName);
+            sCurrentPollLoopReceiver = pollLoopReceiver;
         }
         for (PollingFrame frame : frames) {
             adapter.notifyPollingLoop(frame);
         }
-        PollLoopReceiver pollLoopReceiver =
-                receiveFromWalletRoleHoder ? sWalletRolePollLoopReceiver : sCurrentPollLoopReceiver;
 
         synchronized (pollLoopReceiver) {
             try {
