@@ -264,7 +264,8 @@ public class CardEmulationTest {
     }
 
     @Test
-    public void testSetPreferredService() throws NoSuchFieldException, RemoteException {
+    public void testSetPreferredService()
+            throws NoSuchFieldException, RemoteException, InterruptedException {
         CardEmulation instance = createMockedInstance();
         Activity activity = createAndResumeActivity();
         when(mEmulation.setPreferredService(any(ComponentName.class))).thenReturn(true);
@@ -273,7 +274,8 @@ public class CardEmulationTest {
     }
 
     @Test
-    public void testUnsetPreferredService() throws NoSuchFieldException, RemoteException {
+    public void testUnsetPreferredService()
+            throws NoSuchFieldException, RemoteException, InterruptedException {
         CardEmulation instance = createMockedInstance();
         Activity activity = createAndResumeActivity();
         when(mEmulation.unsetPreferredService()).thenReturn(true);
@@ -283,15 +285,19 @@ public class CardEmulationTest {
 
     @Test
     public void testSupportsAidPrefixRegistration() throws NoSuchFieldException, RemoteException {
-        CardEmulation instance = createMockedInstance();
-        when(mEmulation.supportsAidPrefixRegistration()).thenReturn(true);
-        boolean result = instance.supportsAidPrefixRegistration();
-        Assert.assertTrue(result);
+        try {
+            CardEmulation instance = createMockedInstance();
+            when(mEmulation.supportsAidPrefixRegistration()).thenReturn(true);
+            boolean result = instance.supportsAidPrefixRegistration();
+            Assert.assertTrue(result);
+        } finally {
+            restoreOriginalService();
+        }
     }
 
     @Test
-    public void testGetAidsForPreferredPaymentService() throws NoSuchFieldException,
-        RemoteException {
+    public void testGetAidsForPreferredPaymentService()
+            throws NoSuchFieldException, RemoteException {
         CardEmulation instance = createMockedInstance();
         ArrayList<AidGroup> dynamicAidGroups = new ArrayList<AidGroup>();
         ArrayList<String> aids = new ArrayList<String>();
@@ -385,7 +391,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     @RequiresFlagsDisabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
-    public void testTypeAPollingLoopToDefault() {
+    public void testTypeAPollingLoopToDefault() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         ComponentName originalDefault = null;
         mAdapter.notifyHceDeactivated();
@@ -477,6 +483,8 @@ public class CardEmulationTest {
         static final int REMOTE_FIELD_CHANGED = 6;
         static final int INTERNAL_ERROR_REPORTED = 7;
         CountDownLatch mLatch = null;
+        CountDownLatch[] mLatches = new CountDownLatch[8];
+
 
         Context mContext;
 
@@ -493,12 +501,14 @@ public class CardEmulationTest {
         }
 
         ArrayList<EventLogEntry> mEvents = new ArrayList<EventLogEntry>();
+        ArrayList<EventLogEntry>[] mSpecificEvents = new ArrayList[8];
 
-        EventPollLoopReceiver(Context context) {
+        EventPollLoopReceiver(Context context) throws InterruptedException {
           this(context, false);
         }
 
-        EventPollLoopReceiver(Context context, boolean shouldBroadcastToRemoteEventListener) {
+        EventPollLoopReceiver(Context context, boolean shouldBroadcastToRemoteEventListener)
+                throws InterruptedException {
             super(new ArrayList<>(), null);
             mContext = context;
 
@@ -512,7 +522,7 @@ public class CardEmulationTest {
             }
         }
 
-        private void broadcastToRemoteEventListener() {
+        private void broadcastToRemoteEventListener() throws InterruptedException {
             CountDownLatch latch = new CountDownLatch(1);
 
             final Intent intent = new Intent();
@@ -534,11 +544,8 @@ public class CardEmulationTest {
                         }
                     },
                     handler, Activity.RESULT_OK, null, null);
-            try {
-                if (!latch.await(5, TimeUnit.SECONDS)) {
-                    Assert.fail("Did not receive the expected broadcast within the elapsed time");
-                }
-            } catch (InterruptedException ie) {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                Assert.fail("Did not receive the expected broadcast within the elapsed time");
             }
             handlerThread.quit();
         }
@@ -566,10 +573,21 @@ public class CardEmulationTest {
             onPreferredServiceChanged(mContext.getPackageName(), isPreferred);
         }
 
+        void countDownSpecificEvent(int type) {
+            if (mSpecificEvents[type] == null) {
+                mSpecificEvents[type] = new ArrayList<EventLogEntry>();
+            }
+            mSpecificEvents[type].add(mEvents.getLast());
+            if (mLatches[type] != null) {
+                mLatches[type].countDown();
+            }
+        }
+
         @Override
         public void onObserveModeStateChanged(String pkgName, boolean isEnabled) {
             synchronized (this) {
                 mEvents.add(new EventLogEntry(pkgName, OBSERVE_MODE, isEnabled));
+                countDownSpecificEvent(OBSERVE_MODE);
                 if (mLatch != null) {
                     mLatch.countDown();
                 }
@@ -580,6 +598,7 @@ public class CardEmulationTest {
         public void onPreferredServiceChanged(String pkgName, boolean isPreferred) {
             synchronized (this) {
                 mEvents.add(new EventLogEntry(pkgName, PREFERRED_SERVICE, isPreferred));
+                countDownSpecificEvent(PREFERRED_SERVICE);
                 if (mLatch != null) {
                     mLatch.countDown();
                 }
@@ -598,12 +617,21 @@ public class CardEmulationTest {
             }
         }
 
-        void waitForEvents() {
-            try {
-                if (!mLatch.await(5, TimeUnit.SECONDS)) {
-                    Assert.fail("Did not receive all events within the elapsed time");
-                }
-            } catch (InterruptedException ie) {
+        void setNumEventsToWaitFor(int numEvents, int type) {
+            synchronized (this) {
+                mLatches[type] = new CountDownLatch(numEvents);
+            }
+        }
+
+        void waitForEvents() throws InterruptedException {
+            if (!mLatch.await(5, TimeUnit.SECONDS)) {
+                Assert.fail("Did not receive all events within the elapsed time");
+            }
+        }
+
+        void waitForEvents(int type) throws InterruptedException {
+            if (!mLatches[type].await(5, TimeUnit.SECONDS)) {
+                Assert.fail("Did not receive all events within the elapsed time");
             }
         }
 
@@ -673,7 +701,7 @@ public class CardEmulationTest {
                 "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onObserveModeStateChanged",
                 "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onPreferredServiceChanged"
             })
-    public void testEventListener() throws InterruptedException {
+    public void testEventListener() throws InterruptedException, NoSuchFieldException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
         adapter.notifyHceDeactivated();
@@ -823,10 +851,12 @@ public class CardEmulationTest {
                         Assert.assertTrue((boolean)event.mState);
                         Assert.assertTrue(adapter.isObserveModeEnabled());
 
-                        eventPollLoopReceiver.setNumEventsToWaitFor(1);
+                        eventPollLoopReceiver.setNumEventsToWaitFor(1,
+                                EventPollLoopReceiver.OBSERVE_MODE);
                         Assert.assertTrue(adapter.setObserveModeEnabled(false));
-                        eventPollLoopReceiver.waitForEvents();
-                        event = eventPollLoopReceiver.mEvents.getLast();
+                        eventPollLoopReceiver.waitForEvents(EventPollLoopReceiver.OBSERVE_MODE);
+                        event = eventPollLoopReceiver
+                                .mSpecificEvents[EventPollLoopReceiver.OBSERVE_MODE].getLast();
                         Assert.assertEquals(
                                 CtsMyHostApduService.class.getPackageName(),
                                 event.mServicePackageName);
@@ -835,21 +865,26 @@ public class CardEmulationTest {
                         Assert.assertFalse(adapter.isObserveModeEnabled());
                         numEvents = eventPollLoopReceiver.mEvents.size();
                         numWalletEvents =
-                                walletRolePollLoopReceiver.mEvents.size();
+                        walletRolePollLoopReceiver
+                                .mSpecificEvents[EventPollLoopReceiver.PREFERRED_SERVICE].size();
                         eventPollLoopReceiver.setNumEventsToWaitFor(1);
-                        walletRolePollLoopReceiver.setNumEventsToWaitFor(1);
+                        walletRolePollLoopReceiver
+                                .setNumEventsToWaitFor(1, EventPollLoopReceiver.PREFERRED_SERVICE);
                         Assert.assertTrue(cardEmulation.unsetPreferredService(activity));
                         eventPollLoopReceiver.waitForEvents();
-                        walletRolePollLoopReceiver.waitForEvents();
+                        walletRolePollLoopReceiver
+                                .waitForEvents(EventPollLoopReceiver.PREFERRED_SERVICE);
                         Assert.assertTrue(
                                 "Didn't receive event",
                                 numEvents < eventPollLoopReceiver.mEvents.size());
                         Assert.assertTrue(
                                 "Didn't receive event",
-                                numWalletEvents < walletRolePollLoopReceiver.mEvents.size());
+                                numWalletEvents < walletRolePollLoopReceiver
+                                        .mSpecificEvents[EventPollLoopReceiver.PREFERRED_SERVICE]
+                                                .size());
 
-                        gainedEvent =
-                                walletRolePollLoopReceiver.mEvents.getLast();
+                        gainedEvent = walletRolePollLoopReceiver
+                                .mSpecificEvents[EventPollLoopReceiver.PREFERRED_SERVICE].getLast();
                         lostEvent = eventPollLoopReceiver.mEvents.getLast();
 
                         Assert.assertEquals(
@@ -863,8 +898,6 @@ public class CardEmulationTest {
                                             gainedEvent.mServicePackageName);
                         Assert.assertEquals(
                                 EventPollLoopReceiver.PREFERRED_SERVICE, gainedEvent.mEventType);
-                        Assert.assertTrue((boolean)gainedEvent.mState);
-
                     } finally {
                         if (activity != null) {
                             cardEmulation.unsetPreferredService(activity);
@@ -986,11 +1019,36 @@ public class CardEmulationTest {
                 Assert.fail("Did not receive internal error event within the elapsed time");
             }
             Assert.assertNotEquals(-1, callback.mErrorType);
-            // Give the adapter state a chance to bubble up.
-            Thread.currentThread().sleep(20);
-            if (adapter.getAdapterState() != NfcAdapter.STATE_ON) {
-                // The adapter is restarting due to the hardware error, wait for it to turn back on.
-                Assert.assertTrue(callback.mStateOnLatch.await(5, TimeUnit.SECONDS));
+            // ToDo: can we query the recovery_option from the NfcConfig to make sure
+            // the error matches the config?
+            switch (callback.mErrorType) {
+                case CardEmulation.NFC_INTERNAL_ERROR_COMMAND_TIMEOUT:
+                {
+                    // A timeout error indicates that we will crash the NFC service and restart it.
+                    // Give the adapter state a chance to bubble up.
+                    Thread.currentThread().sleep(300);
+                    if (adapter.getAdapterState() != NfcAdapter.STATE_ON) {
+                        cardEmulation.registerNfcEventCallback(pool, callback);
+                        // The adapter is restarting due to the timeout error, wait for it to
+                        // turn back on.
+                        if (!callback.mStateOnLatch.await(20, TimeUnit.SECONDS)) {
+                            Assert.assertEquals(adapter.getAdapterState(), NfcAdapter.STATE_ON);
+                        }
+                    }
+                    Assert.assertTrue(NfcUtils.enableNfc(adapter, mContext));
+                    Assert.assertTrue(
+                            cardEmulation.setPreferredService(
+                                    activity, new ComponentName(mContext,
+                                    CustomHostApduService.class)));
+                }
+                break;
+                case CardEmulation.NFC_INTERNAL_ERROR_NFC_HARDWARE_ERROR:
+                    // If the recovery option config is set to 1, we will reset the NFC service and
+                    // send a hardware error. We should be good to go at this point.
+                    break;
+                default:
+                    Assert.fail("Expected a hardware error or timeout error but got: "
+                                    + callback.mErrorType);
             }
         } finally {
             activity.finish();
@@ -1001,7 +1059,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testTypeAPollingLoopToForeground() {
+    public void testTypeAPollingLoopToForeground() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1030,7 +1088,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OBSERVE_MODE)
     public void testSetShouldDefaultToObserveModeShouldDefaultToObserveModeDynamic()
-            throws InterruptedException {
+            throws InterruptedException, AssertionError {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
         adapter.notifyHceDeactivated();
@@ -1050,11 +1108,8 @@ public class CardEmulationTest {
             Assert.assertTrue(
                     cardEmulation.setShouldDefaultToObserveModeForService(backgroundService, true));
             // Observe mode is set asynchronously, so just wait a bit to let it happen.
-            try {
-                CommonTestUtils.waitUntil(
-                        "Observe mode hasn't been set", 1, () -> adapter.isObserveModeEnabled());
-            } catch (InterruptedException|AssertionError e) {
-            }
+            CommonTestUtils.waitUntil(
+                    "Observe mode hasn't been set", 1, () -> adapter.isObserveModeEnabled());
             Assert.assertTrue(adapter.isObserveModeEnabled());
         } finally {
             Assert.assertTrue(cardEmulation.unsetPreferredService(activity));
@@ -1155,7 +1210,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testTypeAOneLoopPollingLoopToForeground() {
+    public void testTypeAOneLoopPollingLoopToForeground() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1176,11 +1231,7 @@ public class CardEmulationTest {
                 adapter.notifyPollingLoop(frame);
             }
             synchronized (sCurrentPollLoopReceiver) {
-                try {
-                    sCurrentPollLoopReceiver.wait(5000);
-                } catch (InterruptedException ie) {
-                    Assert.assertNull(ie);
-                }
+                sCurrentPollLoopReceiver.wait(5000);
             }
             sCurrentPollLoopReceiver.test();
         } finally {
@@ -1194,7 +1245,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     @RequiresFlagsDisabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
-    public void testTypeABNoOffPollingLoopToDefault() {
+    public void testTypeABNoOffPollingLoopToDefault() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         ComponentName originalDefault = null;
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
@@ -1221,7 +1272,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled({android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP,
             android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED})
-    public void testTypeAPollingLoopToForegroundWithWalletHolder() {
+    public void testTypeAPollingLoopToForegroundWithWalletHolder() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1281,7 +1332,8 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testTwoCustomPollingLoopToPreferredCustomAndBackgroundDynamic() {
+    public void testTwoCustomPollingLoopToPreferredCustomAndBackgroundDynamic()
+            throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
@@ -1322,11 +1374,7 @@ public class CardEmulationTest {
                 adapter.notifyPollingLoop(frame);
             }
             synchronized (sCurrentPollLoopReceiver) {
-                try {
                     sCurrentPollLoopReceiver.wait(5000);
-                } catch (InterruptedException ie) {
-                    Assert.assertNull(ie);
-                }
             }
             Assert.assertEquals(frames.size(), sCurrentPollLoopReceiver.mReceivedFrames.size());
             Assert.assertEquals(2, sCurrentPollLoopReceiver.mReceivedServiceNames.size());
@@ -1339,7 +1387,7 @@ public class CardEmulationTest {
     }
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testTwoCustomPollingLoopToCustomAndBackgroundDynamic() {
+    public void testTwoCustomPollingLoopToCustomAndBackgroundDynamic() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
@@ -1380,11 +1428,7 @@ public class CardEmulationTest {
                 adapter.notifyPollingLoop(frame);
             }
             synchronized (sCurrentPollLoopReceiver) {
-                try {
-                    sCurrentPollLoopReceiver.wait(5000);
-                } catch (InterruptedException ie) {
-                    Assert.assertNull(ie);
-                }
+                sCurrentPollLoopReceiver.wait(5000);
             }
             Assert.assertEquals(frames.size(),
                     sCurrentPollLoopReceiver.mReceivedFrames.size());
@@ -1400,7 +1444,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testCustomPollingLoopToCustomDynamic() {
+    public void testCustomPollingLoopToCustomDynamic() throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeVsrApiGreaterThanUdc();
         adapter.notifyHceDeactivated();
@@ -1420,7 +1464,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testCustomPollingLoopToCustomDynamicAndRemove() {
+    public void testCustomPollingLoopToCustomDynamicAndRemove() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1459,7 +1503,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testCustomPollingLoopToCustomWithPrefixDynamic() {
+    public void testCustomPollingLoopToCustomWithPrefixDynamic() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1483,7 +1527,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testCustomPollingLoopToCustomWithPrefix() {
+    public void testCustomPollingLoopToCustomWithPrefix() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1503,7 +1547,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     @RequiresFlagsDisabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
-    public void testThreeWayConflictPollingLoopToForegroundDynamic() {
+    public void testThreeWayConflictPollingLoopToForegroundDynamic() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         ComponentName originalDefault = null;
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
@@ -1543,7 +1587,8 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testBackgroundForegroundConflictPollingLoopToForegroundDynamic() {
+    public void testBackgroundForegroundConflictPollingLoopToForegroundDynamic()
+            throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1577,7 +1622,8 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     @RequiresFlagsDisabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
-    public void testBackgroundPaymentConflictPollingLoopToPaymentDynamic() {
+    public void testBackgroundPaymentConflictPollingLoopToPaymentDynamic()
+            throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1612,7 +1658,7 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testCustomPollingLoopToCustom() {
+    public void testCustomPollingLoopToCustom() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1629,7 +1675,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     @RequiresFlagsDisabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
-    public void testThreeWayConflictPollingLoopToForeground() {
+    public void testThreeWayConflictPollingLoopToForeground() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         ComponentName originalDefault = null;
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
@@ -1659,7 +1705,8 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled({android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP,
             android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED})
-    public void testThreeWayConflictPollingLoopToForegroundWithWalletHolder() {
+    public void testThreeWayConflictPollingLoopToForegroundWithWalletHolder()
+            throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1685,7 +1732,8 @@ public class CardEmulationTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void testBackgroundForegroundConflictPollingLoopToForeground() {
+    public void testBackgroundForegroundConflictPollingLoopToForeground()
+            throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1712,7 +1760,7 @@ public class CardEmulationTest {
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     @RequiresFlagsDisabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
-    public void testBackgroundPaymentConflictPollingLoopToPayment() {
+    public void testBackgroundPaymentConflictPollingLoopToPayment() throws InterruptedException {
         assumeVsrApiGreaterThanUdc();
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         adapter.notifyHceDeactivated();
@@ -1783,8 +1831,6 @@ public class CardEmulationTest {
                 PollingCheck.check("Observe mode not disabled", 4000,
                         () -> !adapter.isObserveModeEnabled());
                 adapter.notifyHceDeactivated();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
             } finally {
                 adapter.setObserveModeEnabled(false);
             }
@@ -1821,8 +1867,6 @@ public class CardEmulationTest {
             Thread.currentThread().sleep(4000);
             Assert.assertTrue(adapter.isObserveModeEnabled());
             adapter.notifyHceDeactivated();
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
         } finally {
             adapter.setObserveModeEnabled(false);
         }
@@ -1869,8 +1913,6 @@ public class CardEmulationTest {
             Thread.currentThread().sleep(5000);
             Assert.assertTrue(adapter.isObserveModeEnabled());
             adapter.notifyHceDeactivated();
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
         } finally {
             adapter.setObserveModeEnabled(false);
         }
@@ -1942,8 +1984,6 @@ public class CardEmulationTest {
                         () -> !adapter.isObserveModeEnabled());
                 adapter.notifyHceDeactivated();
                 PollingCheck.check("Observe mode not enabled", 3000, adapter::isObserveModeEnabled);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
             } finally {
                 adapter.setObserveModeEnabled(false);
             }
@@ -2083,8 +2123,6 @@ public class CardEmulationTest {
                         () -> !adapter.isObserveModeEnabled());
                 adapter.notifyHceDeactivated();
                 PollingCheck.check("Observe mode not enabled", 3000, adapter::isObserveModeEnabled);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
             } finally {
                 adapter.setObserveModeEnabled(false);
             }
@@ -2111,30 +2149,27 @@ public class CardEmulationTest {
 
     }
 
-    static void ensureUnlocked() {
+    static void ensureUnlocked() throws InterruptedException, AssertionError {
         final Context context = InstrumentationRegistry.getInstrumentation().getContext();
         final UserManager userManager = context.getSystemService(UserManager.class);
         assumeFalse(userManager.isHeadlessSystemUserMode());
         final Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         final PowerManager pm = context.getSystemService(PowerManager.class);
         final KeyguardManager km = context.getSystemService(KeyguardManager.class);
-        try {
-            if (pm != null && !pm.isInteractive()) {
-                runShellCommand("input keyevent KEYCODE_WAKEUP");
-                CommonTestUtils.waitUntil("Device does not wake up after 5 seconds", 5,
-                        () -> pm != null && pm.isInteractive());
-            }
-            if (km != null && km.isKeyguardLocked()) {
-                CommonTestUtils.waitUntil("Device does not unlock after 30 seconds", 30,
-                        () -> {
-                        SystemUtil.runWithShellPermissionIdentity(
-                                () -> instrumentation.sendKeyDownUpSync(
-                                        (KeyEvent.KEYCODE_MENU)));
-                        return km != null && !km.isKeyguardLocked();
-                    }
-                );
-            }
-        } catch (InterruptedException|AssertionError e) {
+        if (pm != null && !pm.isInteractive()) {
+            runShellCommand("input keyevent KEYCODE_WAKEUP");
+            CommonTestUtils.waitUntil("Device does not wake up after 5 seconds", 5,
+                    () -> pm != null && pm.isInteractive());
+        }
+        if (km != null && km.isKeyguardLocked()) {
+            CommonTestUtils.waitUntil("Device does not unlock after 30 seconds", 30,
+                    () -> {
+                    SystemUtil.runWithShellPermissionIdentity(
+                            () -> instrumentation.sendKeyDownUpSync(
+                                    (KeyEvent.KEYCODE_MENU)));
+                    return km != null && !km.isKeyguardLocked();
+                }
+            );
         }
     }
 
@@ -2240,7 +2275,7 @@ public class CardEmulationTest {
     }
 
     private List<PollingFrame> notifyPollingLoopAndWait(
-            ArrayList<PollingFrame> frames, String serviceName) {
+            ArrayList<PollingFrame> frames, String serviceName) throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         PollLoopReceiver pollLoopReceiver = new PollLoopReceiver(frames, serviceName);
         boolean receiveFromWalletRoleHoder =
@@ -2255,11 +2290,7 @@ public class CardEmulationTest {
         }
 
         synchronized (pollLoopReceiver) {
-            try {
-                pollLoopReceiver.wait(10000);
-            } catch (InterruptedException ie) {
-                Assert.assertNull(ie);
-            }
+            pollLoopReceiver.wait(10000);
         }
         pollLoopReceiver.test();
         Assert.assertEquals(frames.size(), pollLoopReceiver.mFrameIndex);
@@ -2275,7 +2306,7 @@ public class CardEmulationTest {
     @RequiresFlagsEnabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
     @Test
     public void testAidResolutionWithRoleHolder_anotherAppHoldsForeground()
-            throws NoSuchFieldException {
+            throws NoSuchFieldException, InterruptedException  {
         restoreOriginalService();
         Activity activity = createAndResumeActivity();
         CardEmulation instance = CardEmulation.getInstance(mAdapter);
@@ -2549,7 +2580,7 @@ public class CardEmulationTest {
 
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OVERRIDE_RECOVER_ROUTING_TABLE)
     @Test
-    public void testOverrideRoutingTable() {
+    public void testOverrideRoutingTable() throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         Assert.assertTrue(NfcUtils.enableNfc(adapter, mContext));
         final Activity activity = createAndResumeActivity();
@@ -2567,7 +2598,7 @@ public class CardEmulationTest {
 
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OVERRIDE_RECOVER_ROUTING_TABLE)
     @Test
-    public void testRecoverRoutingTable() {
+    public void testRecoverRoutingTable() throws InterruptedException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         Assert.assertTrue(NfcUtils.enableNfc(adapter, mContext));
         final Activity activity = createAndResumeActivity();
@@ -2579,12 +2610,16 @@ public class CardEmulationTest {
     @Test
     public void testSetServiceEnabledForCategoryOther()
             throws NoSuchFieldException, RemoteException {
-        CardEmulation instance = createMockedInstance();
-        when(mEmulation.setServiceEnabledForCategoryOther(
-                anyInt(), any(ComponentName.class), anyBoolean()))
-                .thenReturn(SET_SERVICE_ENABLED_STATUS_OK);
-        int result = instance.setServiceEnabledForCategoryOther(mService, true);
-        Assert.assertEquals(SET_SERVICE_ENABLED_STATUS_OK, result);
+        try {
+            CardEmulation instance = createMockedInstance();
+            when(mEmulation.setServiceEnabledForCategoryOther(
+                    anyInt(), any(ComponentName.class), anyBoolean()))
+                    .thenReturn(SET_SERVICE_ENABLED_STATUS_OK);
+            int result = instance.setServiceEnabledForCategoryOther(mService, true);
+            Assert.assertEquals(SET_SERVICE_ENABLED_STATUS_OK, result);
+        } finally {
+            restoreOriginalService();
+        }
     }
 
     @RequiresFlagsEnabled(Flags.FLAG_ENABLE_CARD_EMULATION_EUICC)
@@ -2639,7 +2674,7 @@ public class CardEmulationTest {
             getVsrApiLevel() > Build.VERSION_CODES.UPSIDE_DOWN_CAKE);
     }
 
-    private Activity createAndResumeActivity() {
+    private Activity createAndResumeActivity() throws InterruptedException {
         ensureUnlocked();
         Intent intent
             = new Intent(ApplicationProvider.getApplicationContext(),
