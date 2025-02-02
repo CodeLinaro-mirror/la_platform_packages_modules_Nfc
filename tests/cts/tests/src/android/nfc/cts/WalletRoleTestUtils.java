@@ -34,7 +34,6 @@ import android.text.TextUtils;
 import com.google.common.util.concurrent.MoreExecutors;
 
 import org.junit.Assert;
-import org.junit.function.ThrowingRunnable;
 
 import java.util.Arrays;
 import java.util.List;
@@ -145,7 +144,7 @@ public final class WalletRoleTestUtils {
         }
     }
 
-    static void runWithRole(Context context, String roleHolder, ThrowingRunnable runnable) {
+    static void runWithRole(Context context, String roleHolder, Runnable runnable) {
         final UserManager userManager = context.getSystemService(UserManager.class);
         assumeFalse(userManager.isHeadlessSystemUserMode());
         try {
@@ -179,7 +178,7 @@ public final class WalletRoleTestUtils {
             roleManager.removeOnRoleHoldersChangedListenerAsUser(onRoleHoldersChangedListener,
                     context.getUser());
             runnable.run();
-        } catch (Throwable e) {
+        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {
             runWithRoleNone(context, () -> {}); //Remove the role holder first to trigger callbacks

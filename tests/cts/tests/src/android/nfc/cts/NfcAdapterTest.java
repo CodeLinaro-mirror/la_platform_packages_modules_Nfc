@@ -162,28 +162,28 @@ public class NfcAdapterTest {
     }
 
     @Test
-    public void testDisableForegroundDispatch() throws InterruptedException {
+    public void testDisableForegroundDispatch() {
             NfcAdapter adapter = getDefaultAdapter();
             Activity activity = createAndResumeActivity();
             adapter.disableForegroundDispatch(activity);
     }
 
     @Test
-    public void testDisableReaderMode() throws InterruptedException {
+    public void testDisableReaderMode() {
             NfcAdapter adapter = getDefaultAdapter();
             Activity activity = createAndResumeActivity();
             adapter.disableReaderMode(activity);
     }
 
     @Test
-    public void testEnable() throws NoSuchFieldException, RemoteException, InterruptedException {
+    public void testEnable() throws NoSuchFieldException, RemoteException {
         NfcAdapter adapter = getDefaultAdapter();
         Assert.assertTrue(NfcUtils.disableNfc(adapter, mContext, true));
         Assert.assertTrue(NfcUtils.enableNfc(adapter, mContext));
     }
 
     @Test
-    public void testEnableForegroundDispatch() throws RemoteException, InterruptedException {
+    public void testEnableForegroundDispatch() throws RemoteException {
             NfcAdapter adapter = getDefaultAdapter();
             Activity activity = createAndResumeActivity();
             Intent intent = new Intent(ApplicationProvider.getApplicationContext(),
@@ -198,7 +198,7 @@ public class NfcAdapterTest {
     }
 
     @Test
-    public void testEnableReaderMode() throws InterruptedException {
+    public void testEnableReaderMode() {
             NfcAdapter adapter = getDefaultAdapter();
             Activity activity = createAndResumeActivity();
             adapter.enableReaderMode(activity, new CtsReaderCallback(),
@@ -319,7 +319,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
-    public void testResetDiscoveryTechnology() throws InterruptedException {
+    public void testResetDiscoveryTechnology() {
         NfcAdapter adapter = getDefaultAdapter();
         Activity activity = createAndResumeActivity();
         adapter.setDiscoveryTechnology(activity, NfcAdapter.FLAG_READER_KEEP,
@@ -329,7 +329,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
-    public void testSetDiscoveryTechnology() throws InterruptedException {
+    public void testSetDiscoveryTechnology() {
         NfcAdapter adapter = getDefaultAdapter();
         Activity activity = createAndResumeActivity();
         adapter.setDiscoveryTechnology(activity,
@@ -345,7 +345,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_NFC_SET_DEFAULT_DISC_TECH)
-    public void testSetDefaultDiscoveryTechnology() throws InterruptedException {
+    public void testSetDefaultDiscoveryTechnology() {
         NfcAdapter adapter = getDefaultAdapter();
         Activity activity = createAndResumeActivity();
         adapter.setDiscoveryTechnology(activity,
@@ -431,7 +431,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_OBSERVE_MODE)
-    public void testDefaultObserveModeForegroundDynamic() throws InterruptedException {
+    public void testDefaultObserveModeForegroundDynamic() {
         NfcAdapter adapter = getDefaultAdapter();
         adapter.notifyHceDeactivated();
         assumeTrue(adapter.isObserveModeSupported());
@@ -516,7 +516,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_OBSERVE_MODE)
-    public void testDefaultObserveModeForeground() throws InterruptedException {
+    public void testDefaultObserveModeForeground() {
         NfcAdapter adapter = getDefaultAdapter();
         CardEmulation cardEmulation = CardEmulation.getInstance(adapter);
         cardEmulation.setShouldDefaultToObserveModeForService(
@@ -1196,7 +1196,7 @@ public class NfcAdapterTest {
         }
     }
 
-    private Activity createAndResumeActivity() throws InterruptedException {
+    private Activity createAndResumeActivity() {
         CardEmulationTest.ensureUnlocked();
         Intent intent = new Intent(ApplicationProvider.getApplicationContext(),
             NfcFCardEmulationActivity.class);
