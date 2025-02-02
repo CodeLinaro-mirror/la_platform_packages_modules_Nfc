@@ -161,6 +161,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -171,8 +173,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
-import java.util.TimerTask;
-import java.util.Timer;
 
 public class NfcService implements DeviceHostListener, ForegroundUtils.Callback {
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
@@ -2407,7 +2407,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             synchronized (NfcService.this) {
                 mPollingPaused = true;
                 mDeviceHost.disableDiscovery();
-                if (timeoutInMs <= 0 || timeoutInMs > this.getMaxPausePollingTimeoutMs()) {
+                /* timeoutInMs 0 will stop discovery without any timeout
+                 * polling will not auto resume */
+                if (timeoutInMs == 0) {
+                    if (DBG) Log.d(TAG, "Pause Poll without timeout");
+                    return NfcOemExtension.POLLING_STATE_CHANGE_SUCCEEDED;
+                }
+                if (timeoutInMs < 0 || timeoutInMs > this.getMaxPausePollingTimeoutMs()) {
                     throw new IllegalArgumentException(
                         "Invalid timeout " + timeoutInMs + " ms!");
                 }
