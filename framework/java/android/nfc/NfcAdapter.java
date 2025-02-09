@@ -1034,6 +1034,13 @@ public final class NfcAdapter {
                         "could not retrieve NFC-F card emulation service during service recovery");
             }
         }
+        try {
+            sNdefNfceeService = service.getT4tNdefNfceeInterface();
+        } catch (RemoteException ee) {
+            sNdefNfceeService = null;
+            Log.e(TAG, "could not retrieve NDEF NFCEE service");
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static boolean isCardEmulationEnabled() {
@@ -2317,13 +2324,19 @@ public final class NfcAdapter {
 
     }
 
-    void enforceResumed(Activity activity) {
+    /**
+     * @hide
+     */
+    public void enforceResumed(Activity activity) {
         if (!activity.isResumed()) {
             throw new IllegalStateException("API cannot be called while activity is paused");
         }
     }
 
-    int getSdkVersion() {
+    /**
+     * @hide
+     */
+    public int getSdkVersion() {
         if (mContext == null) {
             return android.os.Build.VERSION_CODES.GINGERBREAD; // best guess
         } else {

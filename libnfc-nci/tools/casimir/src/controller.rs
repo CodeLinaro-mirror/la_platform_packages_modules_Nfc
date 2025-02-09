@@ -19,7 +19,7 @@ use crate::packets::{nci, rf};
 use anyhow::Result;
 use core::time::Duration;
 use futures::StreamExt;
-use log::{debug, error, info, trace, warn};
+use log::{debug, info, trace, warn};
 use pdl_runtime::Packet;
 use std::convert::TryFrom;
 use std::future::Future;
@@ -225,7 +225,7 @@ pub struct State {
     pub rf_state: RfState,
     pub rf_poll_responses: Vec<RfPollResponse>,
     pub rf_activation_parameters: Vec<u8>,
-    pub passive_observe_mode: nci::PassiveObserveMode,
+    pub passive_observe_mode: u8,
     pub start_time: std::time::Instant,
     pub remote_field_status: rf::FieldStatus,
 }
@@ -731,7 +731,7 @@ impl<'a> Controller<'a> {
                 rf_state: RfState::Idle,
                 rf_poll_responses: vec![],
                 rf_activation_parameters: vec![],
-                passive_observe_mode: nci::PassiveObserveMode::Disable,
+                passive_observe_mode: nci::PassiveObserveMode::Disable.into(),
                 start_time: Instant::now(),
                 remote_field_status: rf::FieldStatus::FieldOff,
             },
@@ -1356,7 +1356,12 @@ impl<'a> Controller<'a> {
         info!("[{}] ANDROID_PASSIVE_OBSERVE_MODE_CMD", self.id);
         info!("     Mode: {:?}", cmd.get_passive_observe_mode());
 
-        self.state.passive_observe_mode = cmd.get_passive_observe_mode();
+        self.state.passive_observe_mode =
+            if cmd.get_passive_observe_mode() == nci::PassiveObserveMode::Disable {
+                u8::from(nci::PassiveObserveMode::Disable)
+            } else {
+                u8::from(nci::TechnologyMask::AllOn)
+            };
         self.send_control(nci::AndroidPassiveObserveModeResponseBuilder {
             status: nci::Status::Ok,
         })
@@ -1369,15 +1374,9 @@ impl<'a> Controller<'a> {
         cmd: nci::AndroidSetPassiveObserverTechCommand,
     ) -> Result<()> {
         info!("[{}] ANDROID_SET_PASSIVE_OBSERVER_TECH_CMD", self.id);
-        info!("     Mask: {:?}", cmd.get_tech_mask());
+        info!("     Mask: {:#b}", cmd.get_tech_mask());
 
-        // TODO add observe mode state for other techs
-        // 0x01: NFC-A
-        if cmd.get_tech_mask() & 0x01 == 0x01 {
-            self.state.passive_observe_mode = nci::PassiveObserveMode::Enable;
-        } else {
-            self.state.passive_observe_mode = nci::PassiveObserveMode::Disable;
-        }
+        self.state.passive_observe_mode = cmd.get_tech_mask();
 
         self.send_control(nci::AndroidPassiveObserveModeResponseBuilder {
             status: nci::Status::Ok,
@@ -1391,6 +1390,7 @@ impl<'a> Controller<'a> {
         _cmd: nci::AndroidQueryPassiveObserveModeCommand,
     ) -> Result<()> {
         info!("[{}] ANDROID_QUERY_PASSIVE_OBSERVE_MODE_CMD", self.id);
+        info!("     Observe mode state: {:#b}", self.state.passive_observe_mode);
 
         self.send_control(nci::AndroidQueryPassiveObserveModeResponseBuilder {
             status: nci::Status::Ok,
@@ -1557,50 +1557,9 @@ impl<'a> Controller<'a> {
         }
     }
 
-    async fn hci_conn_data(&mut self, packet: nci::DataPacket) -> Result<()> {
+    async fn hci_conn_data(&mut self, _packet: nci::DataPacket) -> Result<()> {
         info!("[{}] received data on HCI logical connection", self.id);
-
-        // TODO: parse and understand HCI Control Protocol (HCP)
-        // to accurately respond to the requests. For now it is sufficient
-        // to return hardcoded answers to identified requests.
-        let response = match packet.get_payload() {
-            // ANY_OPEN_PIPE()
-            [0x81, 0x03] => vec![0x81, 0x80],
-            // ANY_GET_PARAMETER(index=1)
-            [0x81, 0x02, 0x01] => vec![0x81, 0x80, 0xd7, 0xfe, 0x65, 0x66, 0xc7, 0xfe, 0x65, 0x66],
-            // ANY_GET_PARAMETER(index=4)
-            [0x81, 0x02, 0x04] => vec![0x81, 0x80, 0x00, 0xc0, 0x01],
-            // ANY_SET_PARAMETER()
-            [0x81, 0x01, 0x03, 0x02, 0xc0]
-            | [0x81, 0x01, 0x03, _, _, _]
-            | [0x81, 0x01, 0x01, _, 0x00, 0x00, 0x00, _, 0x00, 0x00, 0x00] => vec![0x81, 0x80],
-            // ADM_CLEAR_ALL_PIPE()
-            [0x81, 0x14, 0x02, 0x01] => vec![0x81, 0x80],
-            _ => {
-                error!("unimplemented HCI command : {:?}", packet.get_payload());
-                unimplemented!()
-            }
-        };
-
-        self.send_data(nci::DataPacketBuilder {
-            mt: nci::MessageType::Data,
-            conn_id: nci::ConnId::StaticHci,
-            cr: 0,
-            payload: Some(bytes::Bytes::copy_from_slice(&response)),
-        })
-        .await?;
-
-        // Resplenish the credit count for the HCI Connection.
-        self.send_control(
-            nci::CoreConnCreditsNotificationBuilder {
-                connections: vec![nci::ConnectionCredits {
-                    conn_id: nci::ConnId::StaticHci,
-                    credits: 1,
-                }],
-            }
-            .build(),
-        )
-        .await
+        Ok(())
     }
 
     async fn dynamic_conn_data(&mut self, conn_id: u8, packet: nci::DataPacket) -> Result<()> {
@@ -1760,7 +1719,14 @@ impl<'a> Controller<'a> {
         // When the Passive Observe Mode is active, the NFCC shall not respond
         // to any poll requests during the polling loop in Listen Mode, until
         // explicitly authorized by the Host.
-        if self.state.passive_observe_mode == nci::PassiveObserveMode::Enable {
+        let mask: u8 = match technology {
+            rf::Technology::NfcA => nci::TechnologyMask::NfcA.into(),
+            rf::Technology::NfcB => nci::TechnologyMask::NfcB.into(),
+            rf::Technology::NfcF => nci::TechnologyMask::NfcF.into(),
+            rf::Technology::NfcV => nci::TechnologyMask::NfcV.into(),
+            _ => 0,
+        };
+        if self.state.passive_observe_mode & mask != 0 {
             return Ok(());
         }
 

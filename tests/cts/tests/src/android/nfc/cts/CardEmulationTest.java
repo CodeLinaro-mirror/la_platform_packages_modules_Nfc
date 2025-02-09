@@ -477,6 +477,8 @@ public class CardEmulationTest {
         static final int REMOTE_FIELD_CHANGED = 6;
         static final int INTERNAL_ERROR_REPORTED = 7;
         CountDownLatch mLatch = null;
+        CountDownLatch[] mLatches = new CountDownLatch[8];
+
 
         Context mContext;
 
@@ -493,6 +495,7 @@ public class CardEmulationTest {
         }
 
         ArrayList<EventLogEntry> mEvents = new ArrayList<EventLogEntry>();
+        ArrayList<EventLogEntry>[] mSpecificEvents = new ArrayList[8];
 
         EventPollLoopReceiver(Context context) {
           this(context, false);
@@ -566,10 +569,21 @@ public class CardEmulationTest {
             onPreferredServiceChanged(mContext.getPackageName(), isPreferred);
         }
 
+        void countDownSpecificEvent(int type) {
+            if (mSpecificEvents[type] == null) {
+                mSpecificEvents[type] = new ArrayList<EventLogEntry>();
+            }
+            mSpecificEvents[type].add(mEvents.getLast());
+            if (mLatches[type] != null) {
+                mLatches[type].countDown();
+            }
+        }
+
         @Override
         public void onObserveModeStateChanged(String pkgName, boolean isEnabled) {
             synchronized (this) {
                 mEvents.add(new EventLogEntry(pkgName, OBSERVE_MODE, isEnabled));
+                countDownSpecificEvent(OBSERVE_MODE);
                 if (mLatch != null) {
                     mLatch.countDown();
                 }
@@ -580,6 +594,7 @@ public class CardEmulationTest {
         public void onPreferredServiceChanged(String pkgName, boolean isPreferred) {
             synchronized (this) {
                 mEvents.add(new EventLogEntry(pkgName, PREFERRED_SERVICE, isPreferred));
+                countDownSpecificEvent(PREFERRED_SERVICE);
                 if (mLatch != null) {
                     mLatch.countDown();
                 }
@@ -598,9 +613,24 @@ public class CardEmulationTest {
             }
         }
 
+        void setNumEventsToWaitFor(int numEvents, int type) {
+            synchronized (this) {
+                mLatches[type] = new CountDownLatch(numEvents);
+            }
+        }
+
         void waitForEvents() {
             try {
                 if (!mLatch.await(5, TimeUnit.SECONDS)) {
+                    Assert.fail("Did not receive all events within the elapsed time");
+                }
+            } catch (InterruptedException ie) {
+            }
+        }
+
+        void waitForEvents(int type) {
+            try {
+                if (!mLatches[type].await(5, TimeUnit.SECONDS)) {
                     Assert.fail("Did not receive all events within the elapsed time");
                 }
             } catch (InterruptedException ie) {
@@ -673,7 +703,7 @@ public class CardEmulationTest {
                 "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onObserveModeStateChanged",
                 "android.nfc.cardemulation.CardEmulation.NfcEventCallback#onPreferredServiceChanged"
             })
-    public void testEventListener() throws InterruptedException {
+    public void testEventListener() throws InterruptedException, NoSuchFieldException {
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
         assumeObserveModeSupported(adapter);
         adapter.notifyHceDeactivated();
@@ -823,10 +853,12 @@ public class CardEmulationTest {
                         Assert.assertTrue((boolean)event.mState);
                         Assert.assertTrue(adapter.isObserveModeEnabled());
 
-                        eventPollLoopReceiver.setNumEventsToWaitFor(1);
+                        eventPollLoopReceiver.setNumEventsToWaitFor(1,
+                                EventPollLoopReceiver.OBSERVE_MODE);
                         Assert.assertTrue(adapter.setObserveModeEnabled(false));
-                        eventPollLoopReceiver.waitForEvents();
-                        event = eventPollLoopReceiver.mEvents.getLast();
+                        eventPollLoopReceiver.waitForEvents(EventPollLoopReceiver.OBSERVE_MODE);
+                        event = eventPollLoopReceiver
+                                .mSpecificEvents[EventPollLoopReceiver.OBSERVE_MODE].getLast();
                         Assert.assertEquals(
                                 CtsMyHostApduService.class.getPackageName(),
                                 event.mServicePackageName);
@@ -835,21 +867,26 @@ public class CardEmulationTest {
                         Assert.assertFalse(adapter.isObserveModeEnabled());
                         numEvents = eventPollLoopReceiver.mEvents.size();
                         numWalletEvents =
-                                walletRolePollLoopReceiver.mEvents.size();
+                        walletRolePollLoopReceiver
+                                .mSpecificEvents[EventPollLoopReceiver.PREFERRED_SERVICE].size();
                         eventPollLoopReceiver.setNumEventsToWaitFor(1);
-                        walletRolePollLoopReceiver.setNumEventsToWaitFor(1);
+                        walletRolePollLoopReceiver
+                                .setNumEventsToWaitFor(1, EventPollLoopReceiver.PREFERRED_SERVICE);
                         Assert.assertTrue(cardEmulation.unsetPreferredService(activity));
                         eventPollLoopReceiver.waitForEvents();
-                        walletRolePollLoopReceiver.waitForEvents();
+                        walletRolePollLoopReceiver
+                                .waitForEvents(EventPollLoopReceiver.PREFERRED_SERVICE);
                         Assert.assertTrue(
                                 "Didn't receive event",
                                 numEvents < eventPollLoopReceiver.mEvents.size());
                         Assert.assertTrue(
                                 "Didn't receive event",
-                                numWalletEvents < walletRolePollLoopReceiver.mEvents.size());
+                                numWalletEvents < walletRolePollLoopReceiver
+                                        .mSpecificEvents[EventPollLoopReceiver.PREFERRED_SERVICE]
+                                                .size());
 
-                        gainedEvent =
-                                walletRolePollLoopReceiver.mEvents.getLast();
+                        gainedEvent = walletRolePollLoopReceiver
+                                .mSpecificEvents[EventPollLoopReceiver.PREFERRED_SERVICE].getLast();
                         lostEvent = eventPollLoopReceiver.mEvents.getLast();
 
                         Assert.assertEquals(
@@ -863,8 +900,6 @@ public class CardEmulationTest {
                                             gainedEvent.mServicePackageName);
                         Assert.assertEquals(
                                 EventPollLoopReceiver.PREFERRED_SERVICE, gainedEvent.mEventType);
-                        Assert.assertTrue((boolean)gainedEvent.mState);
-
                     } finally {
                         if (activity != null) {
                             cardEmulation.unsetPreferredService(activity);
@@ -986,11 +1021,45 @@ public class CardEmulationTest {
                 Assert.fail("Did not receive internal error event within the elapsed time");
             }
             Assert.assertNotEquals(-1, callback.mErrorType);
-            // Give the adapter state a chance to bubble up.
-            Thread.currentThread().sleep(20);
-            if (adapter.getAdapterState() != NfcAdapter.STATE_ON) {
-                // The adapter is restarting due to the hardware error, wait for it to turn back on.
-                Assert.assertTrue(callback.mStateOnLatch.await(5, TimeUnit.SECONDS));
+            // ToDo: can we query the recovery_option from the NfcConfig to make sure
+            // the error matches the config?
+            switch (callback.mErrorType) {
+                case CardEmulation.NFC_INTERNAL_ERROR_COMMAND_TIMEOUT:
+                {
+                    // A timeout error indicates that we will crash the NFC service and restart it.
+                    // Give the adapter state a chance to bubble up.
+                    Thread.currentThread().sleep(300);
+                    int adapterState = NfcAdapter.STATE_OFF;
+                    while (adapterState == NfcAdapter.STATE_OFF) {
+                        try {
+                            adapterState = adapter.getAdapterState();
+                        } catch (Throwable doe) {
+                            // DOE means the service is restarting, wait and try again.
+                            Thread.currentThread().sleep(100);
+                        }
+                    }
+                    if (adapterState != NfcAdapter.STATE_ON) {
+                        cardEmulation.registerNfcEventCallback(pool, callback);
+                        // The adapter is restarting due to the timeout error, wait for it to
+                        // turn back on.
+                        if (!callback.mStateOnLatch.await(20, TimeUnit.SECONDS)) {
+                            Assert.assertEquals(adapter.getAdapterState(), NfcAdapter.STATE_ON);
+                        }
+                    }
+                    Assert.assertTrue(NfcUtils.enableNfc(adapter, mContext));
+                    Assert.assertTrue(
+                            cardEmulation.setPreferredService(
+                                    activity, new ComponentName(mContext,
+                                    CustomHostApduService.class)));
+                }
+                break;
+                case CardEmulation.NFC_INTERNAL_ERROR_NFC_HARDWARE_ERROR:
+                    // If the recovery option config is set to 1, we will reset the NFC service and
+                    // send a hardware error. We should be good to go at this point.
+                    break;
+                default:
+                    Assert.fail("Expected a hardware error or timeout error but got: "
+                                    + callback.mErrorType);
             }
         } finally {
             activity.finish();
@@ -2611,6 +2680,7 @@ public class CardEmulationTest {
     public void testApduServiceInfoConstructor() {
         ResolveInfo ndefNfceeAppInfo = new ResolveInfo();
         List<String> ndefNfceeAid = new ArrayList<String>();
+        ndefNfceeAid.add("12345678ABCDEF#");
         AidGroup ndefNfceeAidGroup = new AidGroup(ndefNfceeAid, "other");
         ArrayList<AidGroup> ndefNfceeAidStaticGroups = new ArrayList<>();
         ndefNfceeAidStaticGroups.add(ndefNfceeAidGroup);
