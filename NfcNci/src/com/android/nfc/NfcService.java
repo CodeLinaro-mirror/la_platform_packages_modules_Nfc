@@ -36,7 +36,6 @@ import android.app.KeyguardManager;
 import android.app.KeyguardManager.DeviceLockedStateListener;
 import android.app.KeyguardManager.KeyguardLockedStateListener;
 import android.app.PendingIntent;
-import android.app.VrManager;
 import android.app.admin.SecurityLog;
 import android.app.backup.BackupManager;
 import android.app.role.RoleManager;
@@ -207,6 +206,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int NATIVE_CRASH_FILE_SIZE = 1024 * 1024;
     private static final String WAIT_FOR_OEM_ALLOW_BOOT_TIMER_TAG = "NfcWaitForSimTag";
     static final byte[] T4T_NFCEE_CC_FILE_ID = {(byte) (0xE1), (byte) (0x03)};
+    public static final int T4T_NFCEE_MAPPING_VERSION_2_0 = 0x20;
     @VisibleForTesting
     public static final int WAIT_FOR_OEM_ALLOW_BOOT_TIMEOUT_MS = 5_000;
 
@@ -503,7 +503,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private Vibrator mVibrator;
     private VibrationEffect mVibrationEffect;
     private ISecureElementService mSEService;
-    private VrManager mVrManager;
     private final AlarmManager mAlarmManager;
 
     private ScreenStateHelper mScreenStateHelper;
@@ -514,8 +513,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static boolean sToast_debounce = false;
     private static int sToast_debounce_time_ms = 3000;
     public  static boolean sIsDtaMode = false;
-
-    boolean mIsVrModeEnabled;
 
     private final boolean mIsTagAppPrefSupported;
     private int mTagAppBlockListHash;
@@ -1124,12 +1121,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         mNfcDiagnostics = mNfcInjector.getNfcDiagnostics();
 
-        if (pm.hasSystemFeature(PackageManager.FEATURE_VR_MODE_HIGH_PERFORMANCE) &&
-                !mIsWatchType) {
-            mVrManager = mContext.getSystemService(VrManager.class);
-        } else {
-            mVrManager = null;
-        }
         mAlarmManager = mContext.getSystemService(AlarmManager.class);
 
         mCheckDisplayStateForScreenState =
@@ -2073,10 +2064,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public void playSound(int sound) {
         synchronized (this) {
-            if (mVrManager != null && mVrManager.isVrModeEnabled()) {
-                Log.d(TAG, "Not playing NFC sound when Vr Mode is enabled");
-                return;
-            }
             switch (sound) {
                 case SOUND_END:
                     // Lazy init sound pool when needed.
@@ -4102,23 +4089,37 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             try {
                 readData = mDeviceHost.doReadData(T4T_NFCEE_CC_FILE_ID);
-                if (readData.length >= 15) {
-                    int cclen = ((Byte.toUnsignedInt(readData[0])) << 8)
-                            + (Byte.toUnsignedInt(readData[1]));
-                    int version = Byte.toUnsignedInt(readData[2]);
-                    int ndefFileId = ((Byte.toUnsignedInt(readData[9])) << 8)
-                            + Byte.toUnsignedInt(readData[10]);
-                    int ndefMaxFileSize = ((Byte.toUnsignedInt(readData[11])) << 8)
-                            + Byte.toUnsignedInt(readData[12]);
-                    boolean isReadAllowed = readData[13] == 0;
-                    boolean isWriteAllowed = readData[14] == 0;
-                    ccFileInfo = new T4tNdefNfceeCcFileInfo(cclen,  version,
-                            ndefFileId,  ndefMaxFileSize, isReadAllowed,  isWriteAllowed);
-                } else {
-                    Log.e(TAG, "Empty data received while reading T4T NDEF NFCEE CC data");
-                }
             } catch (Exception e) {
                 Log.e(TAG, "Exception occurred while reading NDEF NFCEE CC File data", e);
+                return ccFileInfo;
+            }
+            if (readData.length >= 15) {
+                int cclen =
+                        ((Byte.toUnsignedInt(readData[0])) << 8) +
+                                (Byte.toUnsignedInt(readData[1]));
+                int version = Byte.toUnsignedInt(readData[2]);
+                if (version == T4T_NFCEE_MAPPING_VERSION_2_0) {
+                    int ndefFileId =
+                            ((Byte.toUnsignedInt(readData[9])) << 8) +
+                                    Byte.toUnsignedInt(readData[10]);
+                    int ndefMaxFileSize =
+                            ((Byte.toUnsignedInt(readData[11])) << 8) +
+                                    Byte.toUnsignedInt(readData[12]);
+                    boolean isReadAllowed = readData[13] == 0;
+                    boolean isWriteAllowed = readData[14] == 0;
+
+                    ccFileInfo = new T4tNdefNfceeCcFileInfo(
+                            cclen, version, ndefFileId, ndefMaxFileSize, isReadAllowed,
+                            isWriteAllowed);
+                } else {
+                    Log.e(TAG,
+                            "Unsupported NDEF mapping version received. "
+                                    + "Versions otherthan 2.0 are not supported.");
+                    throw new UnsupportedOperationException(
+                            "Unsupported NDEF mapping version received");
+                }
+            } else {
+                Log.e(TAG, "Empty data received while reading T4T NDEF NFCEE CC data");
             }
             return ccFileInfo;
         }
@@ -4129,7 +4130,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (mDeviceHost.isNdefOperationOngoing()) {
                 return T4tNdefNfcee.CLEAR_DATA_FAILED_DEVICE_BUSY;
             }
+            boolean isEnabled = (isNfcEnabled()
+                    || (((mIsAlwaysOnSupported && mAlwaysOnState == NfcAdapter.STATE_ON))
+                    && (mAlwaysOnMode == NfcOemExtension.ENABLE_EE)));
+            if (!isEnabled) {
+                mDeviceHost.setPartialInitMode(NfcOemExtension.ENABLE_EE);
+                mDeviceHost.initialize();
+            }
             boolean status  = mDeviceHost.doClearNdefData();
+            if (!isEnabled) {
+                mDeviceHost.deinitialize();
+            }
             Log.i(TAG, "doClearNdefT4tData : " + status);
             return status
                     ? T4tNdefNfcee.CLEAR_DATA_SUCCESS
@@ -5988,8 +5999,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         proto.write(NfcServiceDumpProto.HCE_CAPABLE, mIsHceCapable);
         proto.write(NfcServiceDumpProto.HCE_F_CAPABLE, mIsHceFCapable);
         proto.write(NfcServiceDumpProto.SECURE_NFC_CAPABLE, mIsSecureNfcCapable);
-        proto.write(NfcServiceDumpProto.VR_MODE_ENABLED,
-                (mVrManager != null) ? mVrManager.isVrModeEnabled() : false);
+        proto.write(NfcServiceDumpProto.VR_MODE_ENABLED, false);
 
         long token = proto.start(NfcServiceDumpProto.DISCOVERY_PARAMS);
         mCurrentDiscoveryParameters.dumpDebug(proto);
