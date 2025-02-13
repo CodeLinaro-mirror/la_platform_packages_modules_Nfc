@@ -16,6 +16,7 @@
 
 package android.nfc.cardemulation;
 
+
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.SdkConstant;
@@ -24,7 +25,6 @@ import android.annotation.SuppressLint;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.nfc.Flags;
 import android.nfc.NfcAdapter;
 import android.os.Bundle;
 import android.os.Handler;
@@ -34,6 +34,8 @@ import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.util.Log;
+
+import com.android.nfc.module.flags.Flags;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -257,6 +259,11 @@ public abstract class HostApduService extends Service {
     /**
      * @hide
      */
+    public static final int MSG_POLLING_LOOP_ACK = 7;
+
+    /**
+     * @hide
+     */
     public static final String KEY_DATA = "data";
 
     /**
@@ -298,7 +305,7 @@ public abstract class HostApduService extends Service {
                             Message ackMsg = Message.obtain(null, MSG_COMMAND_APDU_ACK);
                             ackMsg.arg1 = msg.arg1;
                             ackMsg.replyTo = mMessenger;
-                            mNfcService.send(ackMsg);
+                            msg.replyTo.send(ackMsg);
                         } catch (RemoteException e) {
                             Log.e(TAG, "Failed to acknowledge MSG_COMMAND_APDU", e);
                         }
@@ -377,6 +384,17 @@ public abstract class HostApduService extends Service {
                                 msg.getData().getParcelableArrayList(
                                     KEY_POLLING_LOOP_FRAMES_BUNDLE, PollingFrame.class);
                         processPollingFrames(pollingFrames);
+
+                        if (Flags.nfcHceLatencyEvents()) {
+                            try {
+                                Message ackMsg = Message.obtain(null, MSG_POLLING_LOOP_ACK);
+                                ackMsg.arg1 = msg.arg1;
+                                ackMsg.replyTo = mMessenger;
+                                msg.replyTo.send(ackMsg);
+                            } catch (RemoteException e) {
+                                Log.e(TAG, "Failed to acknowledge MSG_POLLING_LOOP", e);
+                            }
+                        }
                     }
                     break;
                 default:
