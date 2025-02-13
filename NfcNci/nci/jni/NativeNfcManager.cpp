@@ -1808,14 +1808,9 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     stopPolling_rfDiscoveryDisabled();
   }
 
-  // Check listen configuration
-  if (enable_host_routing) {
-    RoutingManager::getInstance().enableRoutingToHost();
-    RoutingManager::getInstance().commitRouting();
-  } else {
-    RoutingManager::getInstance().disableRoutingToHost();
-    RoutingManager::getInstance().commitRouting();
-  }
+  // Checking if RT should be updated
+  RoutingManager::getInstance().commitRouting();
+
   // Actually start discovery.
   startRfDiscovery(true);
   sDiscoveryEnabled = true;
@@ -2324,9 +2319,7 @@ static jboolean nfcManager_doSetNfcSecure(JNIEnv* e, jobject o,
   RoutingManager& routingManager = RoutingManager::getInstance();
   routingManager.setNfcSecure(enable);
   if (sRoutingInitialized) {
-    routingManager.disableRoutingToHost();
-    routingManager.updateRoutingTable();
-    routingManager.enableRoutingToHost();
+    routingManager.setEeTechRouteUpdateRequired();
   }
   return true;
 }
