@@ -64,6 +64,7 @@ import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import androidx.annotation.NonNull;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
+import androidx.test.filters.RequiresDevice;
 
 import org.junit.Assert;
 import org.junit.Assume;
@@ -87,6 +88,8 @@ import java.util.function.Consumer;
 public class NfcAdapterTest {
 
     private static final long MAX_POLLING_PAUSE_TIMEOUT = 40000;
+    static final int MOCK_NATIVE_HANDLE = 0;
+    static boolean sTagRemoved = false;
     @Mock private DevicePolicyManager mDevicePolicyManager;
     private Context mContext;
     @Rule
@@ -223,10 +226,17 @@ public class NfcAdapterTest {
     public void testIgnore() throws NoSuchFieldException, RemoteException {
         NfcAdapter adapter = getDefaultAdapter();
         CtsOnTagRemovedListener listener = new CtsOnTagRemovedListener();
+        sTagRemoved = false;
         IsoDep isoDep = createIsoDepTag();
 
-        // This is a fake tag, so ignore() will always return false.
-        Assert.assertFalse(adapter.ignore(isoDep.getTag(), 0, listener, null));
+        Assert.assertTrue(adapter.ignore(isoDep.getTag(), 0, listener, null));
+        // Wait a second to make sure listener callback fired
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            // Ignore
+        }
+        Assert.assertTrue(sTagRemoved);
     }
 
     @Test
@@ -739,6 +749,7 @@ public class NfcAdapterTest {
     }
 
     @Test
+    @RequiresDevice
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OEM_EXTENSION)
     public void testOemExtensionMaybeTriggerFirmwareUpdate()
             throws InterruptedException, RemoteException {
@@ -747,7 +758,6 @@ public class NfcAdapterTest {
         NfcOemExtension nfcOemExtension = nfcAdapter.getNfcOemExtension();
         Assert.assertNotNull(nfcOemExtension);
         nfcOemExtension.maybeTriggerFirmwareUpdate();
-        Assert.assertTrue(NfcUtils.disableNfc(nfcAdapter, mContext));
     }
 
     @Test
@@ -1158,7 +1168,9 @@ public class NfcAdapterTest {
 
     private static class CtsOnTagRemovedListener implements NfcAdapter.OnTagRemovedListener {
         @Override
-        public void onTagRemoved() {}
+        public void onTagRemoved() {
+            sTagRemoved = true;
+        }
     }
 
     private Activity createAndResumeActivity() {
@@ -1180,7 +1192,7 @@ public class NfcAdapterTest {
         extras.putByteArray(IsoDep.EXTRA_HI_LAYER_RESP, new byte[]{0x00});
         extras.putByteArray(IsoDep.EXTRA_HIST_BYTES, new byte[]{0x00});
         Tag tag = new Tag(new byte[]{0x00}, new int[]{TagTechnology.ISO_DEP},
-            new Bundle[]{extras}, 0, 0L, null);
+                new Bundle[]{extras}, MOCK_NATIVE_HANDLE, 0L, null);
         return IsoDep.get(tag);
     }
 

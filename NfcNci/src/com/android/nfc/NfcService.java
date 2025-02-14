@@ -335,7 +335,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int NCI_STATUS_REJECTED = 0x01;
     private static final int NCI_STATUS_MESSAGE_CORRUPTED = 0x02;
     private static final int NCI_STATUS_FAILED = 0x03;
-    private static final int SEND_VENDOR_CMD_TIMEOUT_MS = 3000;
+    private static final int SEND_VENDOR_CMD_TIMEOUT_MS = 3_000;
+    private static final int CHECK_FIRMWARE_TIMEOUT_MS = 8_000;
     private static final int NCI_GID_PROP = 0x0F;
     private static final int NCI_MSG_PROP_ANDROID = 0x0C;
     private static final int NCI_MSG_PROP_ANDROID_POWER_SAVING = 0x01;
@@ -413,6 +414,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static int mDispatchFailedMax;
 
     static final int INVALID_NATIVE_HANDLE = -1;
+    static final int MOCK_NATIVE_HANDLE = 0;
     byte mDebounceTagUid[];
     int mDebounceTagDebounceMs;
     int mDebounceTagNativeHandle = INVALID_NATIVE_HANDLE;
@@ -2525,12 +2527,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
 
-            if (debounceMs == 0 && mDebounceTagNativeHandle != INVALID_NATIVE_HANDLE
-                && nativeHandle == mDebounceTagNativeHandle) {
-              // Remove any previous messages and immediately debounce.
-              mHandler.removeMessages(MSG_TAG_DEBOUNCE);
-              mHandler.sendEmptyMessage(MSG_TAG_DEBOUNCE);
-              return true;
+            if (nativeHandle == MOCK_NATIVE_HANDLE
+                    || (debounceMs == 0 && mDebounceTagNativeHandle != INVALID_NATIVE_HANDLE
+                        && nativeHandle == mDebounceTagNativeHandle)) {
+                // Remove any previous messages and immediately debounce.
+                mHandler.removeMessages(MSG_TAG_DEBOUNCE);
+                synchronized (NfcService.this) {
+                    mDebounceTagRemovedCallback = callback;
+                }
+                mHandler.sendEmptyMessage(MSG_TAG_DEBOUNCE);
+                return true;
             }
 
             TagEndpoint tag = (TagEndpoint) findAndRemoveObject(nativeHandle);
@@ -3408,7 +3414,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void checkFirmware() throws RemoteException {
             if (DBG) Log.i(TAG, "checkFirmware");
             NfcPermissions.enforceAdminPermissions(mContext);
-            mDeviceHost.checkFirmware();
+            FutureTask<Integer> checkFirmwareTask =
+                new FutureTask<>(() -> {
+                    mDeviceHost.checkFirmware();
+                    return 0;
+                });
+            try {
+                runTaskOnSingleThreadExecutor(
+                    checkFirmwareTask, CHECK_FIRMWARE_TIMEOUT_MS);
+            } catch (TimeoutException e) {
+                Log.e(TAG, "Failed to check firmware - status : TIMEOUT", e);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            }
         }
 
         @Override

@@ -6,7 +6,7 @@ android_library {
         "src/com/android/nfc/service/**/*.java",
     ],
     manifest: "src/com/android/nfc/utils/AndroidManifest.xml",
-    min_sdk_version: "35",
+    min_sdk_version: "36",
     static_libs: [
         "mobly-snippet-lib",
         "androidx.test.runner",
@@ -21,15 +21,12 @@ android_library {
         "//packages/modules/Nfc:__subpackages__",
         "//vendor:__subpackages__",
     ],
-    lint: {
-        baseline_filename: "lint-baseline.xml",
-    },
 }
 
 android_test {
     name: "NfcEmulatorApduApp",
     sdk_version: "test_current",
-    min_sdk_version: "35",
+    min_sdk_version: "36",
     srcs: [
         "src/com/android/nfc/emulatorapp/**/*.kt",
     ],
@@ -70,28 +67,7 @@ android_test {
         "android.nfc.flags-aconfig-java",
         "androidx.test.runner",
     ],
-    min_sdk_version: "35",
-    visibility: [
-        "//cts:__subpackages__",
-        "//packages/modules/Nfc/NfcNci:__subpackages__",
-        "//packages/modules/Nfc:__subpackages__",
-        "//vendor:__subpackages__",
-    ],
-}
-
-android_test {
-    name: "NfcReaderTestApp",
-    sdk_version: "test_current",
-    srcs: [
-        "src/com/android/nfc/reader/**/*.java",
-    ],
-    manifest: "src/com/android/nfc/reader/AndroidManifest.xml",
-    static_libs: [
-        "framework-nfc.impl",
-        "compatibility-device-util-axt",
-        "nfc-multidevice-utils",
-    ],
-    min_sdk_version: "35",
+    min_sdk_version: "36",
     visibility: [
         "//cts:__subpackages__",
         "//packages/modules/Nfc/NfcNci:__subpackages__",

@@ -23,7 +23,7 @@
 
     <device name="AndroidDevice">
         <target_preparer class="AndroidMinSdkVersionCheckDecorator">
-            <option name="min_sdk_version" value="35" />
+            <option name="min_sdk_version" value="36" />
         </target_preparer>
         <target_preparer class="AndroidInstallAppsDecorator" />
     </device>
@@ -32,5 +32,6 @@
 
     <option name="mobly_pkg" key="file" value="CtsNfcHceMultiDeviceTestCases" />
     <option name="build_apk" key="file" value="NfcEmulatorTestApp.apk" />
+    <option name="build_apk" key="file" value="NfcEmulatorApduApp.apk" />
     <option name="mobly_config" key="file" value="config.yaml" />
 </configuration>
