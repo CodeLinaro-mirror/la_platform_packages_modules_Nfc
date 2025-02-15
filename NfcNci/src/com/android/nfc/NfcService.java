@@ -3398,6 +3398,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 .build());
             }
             mPrefsEditor.clear();
+            if (mIsNfcUserChangeRestricted) {
+                mPrefsEditor.putBoolean(PREF_NFC_ON, getNfcOnSetting());
+            }
             mPrefsEditor.putBoolean(
                 PREF_NFC_READER_OPTION_ON, mDeviceConfigFacade.getDefaultReaderOption());
             mPrefsEditor.commit();
