@@ -925,7 +925,7 @@ public final class NfcAdapter {
         mLock = new Object();
         mControllerAlwaysOnListener = new NfcControllerAlwaysOnListener(getService());
         mNfcWlcStateListener = new NfcWlcStateListener(getService());
-        mNfcVendorNciCallbackListener = new NfcVendorNciCallbackListener(getService());
+        mNfcVendorNciCallbackListener = new NfcVendorNciCallbackListener();
         mNfcOemExtension = new NfcOemExtension(mContext, this);
     }
 
@@ -1033,6 +1033,13 @@ public final class NfcAdapter {
                 Log.e(TAG,
                         "could not retrieve NFC-F card emulation service during service recovery");
             }
+        }
+        try {
+            sNdefNfceeService = service.getT4tNdefNfceeInterface();
+        } catch (RemoteException ee) {
+            sNdefNfceeService = null;
+            Log.e(TAG, "could not retrieve NDEF NFCEE service");
+            throw new UnsupportedOperationException();
         }
     }
 
@@ -2317,13 +2324,19 @@ public final class NfcAdapter {
 
     }
 
-    void enforceResumed(Activity activity) {
+    /**
+     * @hide
+     */
+    public void enforceResumed(Activity activity) {
         if (!activity.isResumed()) {
             throw new IllegalStateException("API cannot be called while activity is paused");
         }
     }
 
-    int getSdkVersion() {
+    /**
+     * @hide
+     */
+    public int getSdkVersion() {
         if (mContext == null) {
             return android.os.Build.VERSION_CODES.GINGERBREAD; // best guess
         } else {
@@ -2561,11 +2574,11 @@ public final class NfcAdapter {
     }
 
     /** @hide */
-    interface ServiceCall {
+    public interface ServiceCall {
         void call() throws RemoteException;
     }
     /** @hide */
-    static void callService(ServiceCall call) {
+    public static void callService(ServiceCall call) {
         try {
             if (sService == null) {
                 attemptDeadServiceRecovery(new RemoteException("NFC Service is null"));

@@ -42,6 +42,9 @@ import android.nfc.INfcCardEmulation;
 import android.nfc.INfcEventCallback;
 import android.nfc.NfcAdapter;
 import android.os.Build;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -978,8 +981,25 @@ public final class CardEmulation {
     @SetServiceEnabledStatusCode
     public int setServiceEnabledForCategoryOther(@NonNull ComponentName service,
             boolean status) {
+        return setServiceEnabledForCategoryOther(
+                service, mContext.getUser().getIdentifier(), status);
+    }
+
+    /**
+     * Same as {@link #setServiceEnabledForCategoryOther(ComponentName, boolean)} for a particular
+     * user.
+     *
+     * @param service The ComponentName of the service
+     * @param userId User id
+     * @param status  true to enable, false to disable
+     * @return status code defined in {@link SetServiceEnabledStatusCode}
+     * @hide
+     */
+    @SetServiceEnabledStatusCode
+    public int setServiceEnabledForCategoryOther(@NonNull ComponentName service,
+            @UserIdInt int userId, boolean status) {
         return callServiceReturn(() ->
-                sService.setServiceEnabledForCategoryOther(mContext.getUser().getIdentifier(),
+                sService.setServiceEnabledForCategoryOther(userId,
                         service, status), SET_SERVICE_ENABLED_STATUS_FAILURE_UNKNOWN_ERROR);
     }
 
@@ -1456,6 +1476,35 @@ public final class CardEmulation {
                 }
             };
 
+    private void linkToNfcDeath() {
+        try {
+            mDeathRecipient = new IBinder.DeathRecipient() {
+                @Override
+                public void binderDied() {
+                    sService = null;
+                    Handler handler = new Handler(Looper.getMainLooper());
+                    handler.postDelayed(new Runnable() {
+                        public void run() {
+                            try {
+                                synchronized (mNfcEventCallbacks) {
+                                    if (mNfcEventCallbacks.size() > 0) {
+                                        callService(() ->
+                                            sService.registerNfcEventCallback(mINfcEventCallback));
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                handler.postDelayed(this, 50);
+                            }
+                        }
+                    }, 50);
+                }
+            };
+            sService.asBinder().linkToDeath(mDeathRecipient, 0);
+        } catch (RemoteException re) {
+            Log.e(TAG, "Couldn't link to death");
+        }
+    }
+
     /**
      * Register a listener for NFC Events.
      *
@@ -1470,9 +1519,14 @@ public final class CardEmulation {
         }
         synchronized (mNfcEventCallbacks) {
             mNfcEventCallbacks.put(listener, executor);
-            callService(() -> sService.registerNfcEventCallback(mINfcEventCallback));
+            if (mNfcEventCallbacks.size() == 1) {
+                callService(() -> sService.registerNfcEventCallback(mINfcEventCallback));
+                linkToNfcDeath();
+            }
         }
     }
+
+    private IBinder.DeathRecipient mDeathRecipient;
 
     /**
      * Unregister a preferred service listener that was previously registered with {@link
@@ -1489,6 +1543,10 @@ public final class CardEmulation {
             mNfcEventCallbacks.remove(listener);
             if (mNfcEventCallbacks.size() == 0) {
                 callService(() -> sService.unregisterNfcEventCallback(mINfcEventCallback));
+                if (mDeathRecipient != null) {
+                    sService.asBinder().unlinkToDeath(mDeathRecipient, 0);
+                    mDeathRecipient = null;
+                }
             }
         }
     }

@@ -207,6 +207,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int NATIVE_CRASH_FILE_SIZE = 1024 * 1024;
     private static final String WAIT_FOR_OEM_ALLOW_BOOT_TIMER_TAG = "NfcWaitForSimTag";
     static final byte[] T4T_NFCEE_CC_FILE_ID = {(byte) (0xE1), (byte) (0x03)};
+    public static final int T4T_NFCEE_MAPPING_VERSION_2_0 = 0x20;
     @VisibleForTesting
     public static final int WAIT_FOR_OEM_ALLOW_BOOT_TIMEOUT_MS = 5_000;
 
@@ -583,7 +584,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onRemoteEndpointDiscovered(TagEndpoint tag) {
       Log.d(TAG, "onRemoteEndpointDiscovered()");
-        sendMessage(NfcService.MSG_NDEF_TAG, tag);
+        sendMessage(MSG_NDEF_TAG, tag);
     }
 
     /**
@@ -683,10 +684,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send onRemoteFieldActivated", e);
         }
-        if (Flags.coalesceRfEvents() && mHandler.hasMessages(NfcService.MSG_RF_FIELD_DEACTIVATED)) {
-            mHandler.removeMessages(NfcService.MSG_RF_FIELD_DEACTIVATED);
+        if (Flags.coalesceRfEvents() && mHandler.hasMessages(MSG_RF_FIELD_DEACTIVATED)) {
+            mHandler.removeMessages(MSG_RF_FIELD_DEACTIVATED);
         } else {
-            sendMessage(NfcService.MSG_RF_FIELD_ACTIVATED, null);
+            sendMessage(MSG_RF_FIELD_ACTIVATED, null);
         }
         if (mStatsdUtils != null) {
             mStatsdUtils.logFieldChanged(true, 0);
@@ -717,10 +718,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
         if (Flags.coalesceRfEvents()) {
             mHandler.sendMessageDelayed(
-                    mHandler.obtainMessage(NfcService.MSG_RF_FIELD_DEACTIVATED),
+                    mHandler.obtainMessage(MSG_RF_FIELD_DEACTIVATED),
                     RF_COALESCING_WINDOW);
         } else {
-            sendMessage(NfcService.MSG_RF_FIELD_DEACTIVATED, null);
+            sendMessage(MSG_RF_FIELD_DEACTIVATED, null);
         }
         if (mStatsdUtils != null) {
             mStatsdUtils.logFieldChanged(false, 0);
@@ -759,7 +760,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onNfcTransactionEvent(byte[] aid, byte[] data, String seName) {
         byte[][] dataObj = {aid, data, seName.getBytes()};
-        sendMessage(NfcService.MSG_TRANSACTION_EVENT, dataObj);
+        sendMessage(MSG_TRANSACTION_EVENT, dataObj);
     }
 
     @Override
@@ -864,7 +865,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onSeSelected() {
-        sendMessage(NfcService.MSG_SE_SELECTED_EVENT, null);
+        sendMessage(MSG_SE_SELECTED_EVENT, null);
     }
 
     @Override
@@ -1991,6 +1992,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
                 if (mState == NfcAdapter.STATE_ON && mCardEmulationManager != null) {
                     mCardEmulationManager.updateForShouldDefaultToObserveMode(getUserId());
+                    mCardEmulationManager.updateFirmwareExitFramesForWalletRole(getUserId());
                 }
                 if (mAlwaysOnState != NfcAdapter.STATE_TURNING_ON) {
                     Intent intent = new Intent(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
@@ -2988,11 +2990,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             Map<Integer, Integer> techCodeToMask = new HashMap<Integer, Integer>();
 
-            techCodeToMask.put(TagTechnology.NFC_A, NfcService.NFC_POLL_A);
-            techCodeToMask.put(TagTechnology.NFC_B, NfcService.NFC_POLL_B);
-            techCodeToMask.put(TagTechnology.NFC_V, NfcService.NFC_POLL_V);
-            techCodeToMask.put(TagTechnology.NFC_F, NfcService.NFC_POLL_F);
-            techCodeToMask.put(TagTechnology.NFC_BARCODE, NfcService.NFC_POLL_KOVIO);
+            techCodeToMask.put(TagTechnology.NFC_A, NFC_POLL_A);
+            techCodeToMask.put(TagTechnology.NFC_B, NFC_POLL_B);
+            techCodeToMask.put(TagTechnology.NFC_V, NFC_POLL_V);
+            techCodeToMask.put(TagTechnology.NFC_F, NFC_POLL_F);
+            techCodeToMask.put(TagTechnology.NFC_BARCODE, NFC_POLL_KOVIO);
 
             int mask = 0;
 
@@ -4108,23 +4110,37 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             try {
                 readData = mDeviceHost.doReadData(T4T_NFCEE_CC_FILE_ID);
-                if (readData.length >= 15) {
-                    int cclen = ((Byte.toUnsignedInt(readData[0])) << 8)
-                            + (Byte.toUnsignedInt(readData[1]));
-                    int version = Byte.toUnsignedInt(readData[2]);
-                    int ndefFileId = ((Byte.toUnsignedInt(readData[9])) << 8)
-                            + Byte.toUnsignedInt(readData[10]);
-                    int ndefMaxFileSize = ((Byte.toUnsignedInt(readData[11])) << 8)
-                            + Byte.toUnsignedInt(readData[12]);
-                    boolean isReadAllowed = readData[13] == 0;
-                    boolean isWriteAllowed = readData[14] == 0;
-                    ccFileInfo = new T4tNdefNfceeCcFileInfo(cclen,  version,
-                            ndefFileId,  ndefMaxFileSize, isReadAllowed,  isWriteAllowed);
-                } else {
-                    Log.e(TAG, "Empty data received while reading T4T NDEF NFCEE CC data");
-                }
             } catch (Exception e) {
                 Log.e(TAG, "Exception occurred while reading NDEF NFCEE CC File data", e);
+                return ccFileInfo;
+            }
+            if (readData.length >= 15) {
+                int cclen =
+                        ((Byte.toUnsignedInt(readData[0])) << 8) +
+                                (Byte.toUnsignedInt(readData[1]));
+                int version = Byte.toUnsignedInt(readData[2]);
+                if (version == T4T_NFCEE_MAPPING_VERSION_2_0) {
+                    int ndefFileId =
+                            ((Byte.toUnsignedInt(readData[9])) << 8) +
+                                    Byte.toUnsignedInt(readData[10]);
+                    int ndefMaxFileSize =
+                            ((Byte.toUnsignedInt(readData[11])) << 8) +
+                                    Byte.toUnsignedInt(readData[12]);
+                    boolean isReadAllowed = readData[13] == 0;
+                    boolean isWriteAllowed = readData[14] == 0;
+
+                    ccFileInfo = new T4tNdefNfceeCcFileInfo(
+                            cclen, version, ndefFileId, ndefMaxFileSize, isReadAllowed,
+                            isWriteAllowed);
+                } else {
+                    Log.e(TAG,
+                            "Unsupported NDEF mapping version received. "
+                                    + "Versions otherthan 2.0 are not supported.");
+                    throw new UnsupportedOperationException(
+                            "Unsupported NDEF mapping version received");
+                }
+            } else {
+                Log.e(TAG, "Empty data received while reading T4T NDEF NFCEE CC data");
             }
             return ccFileInfo;
         }
@@ -4135,7 +4151,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (mDeviceHost.isNdefOperationOngoing()) {
                 return T4tNdefNfcee.CLEAR_DATA_FAILED_DEVICE_BUSY;
             }
+            boolean isEnabled = (isNfcEnabled()
+                    || (((mIsAlwaysOnSupported && mAlwaysOnState == NfcAdapter.STATE_ON))
+                    && (mAlwaysOnMode == NfcOemExtension.ENABLE_EE)));
+            if (!isEnabled) {
+                mDeviceHost.setPartialInitMode(NfcOemExtension.ENABLE_EE);
+                mDeviceHost.initialize();
+            }
             boolean status  = mDeviceHost.doClearNdefData();
+            if (!isEnabled) {
+                mDeviceHost.deinitialize();
+            }
             Log.i(TAG, "doClearNdefT4tData : " + status);
             return status
                     ? T4tNdefNfcee.CLEAR_DATA_SUCCESS
@@ -4645,7 +4671,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.d(TAG,
                   "sendScreenMessageAfterNfcCharging - applying postponed screen state "
                           + screenState);
-            NfcService.getInstance().sendMessage(NfcService.MSG_APPLY_SCREEN_STATE, screenState);
+            NfcService.getInstance().sendMessage(MSG_APPLY_SCREEN_STATE, screenState);
             mPendingPowerStateUpdate = false;
             return true;
         }
@@ -5791,7 +5817,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 new ApplyRoutingTask().execute(Integer.valueOf(screenState));
             }
             if (DBG) Log.d(TAG, "applyScreenState(): screenState != mScreenState=" + mScreenState );
-            sendMessage(NfcService.MSG_APPLY_SCREEN_STATE, screenState);
+            sendMessage(MSG_APPLY_SCREEN_STATE, screenState);
         }
     }
 
@@ -6052,5 +6078,28 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    public boolean isFirmwareExitFramesSupported() {
+        return mDeviceHost.isFirmwareExitFramesSupported();
+    }
+
+    public int getNumberOfFirmwareExitFramesSupported() {
+        return mDeviceHost.getNumberOfFirmwareExitFramesSupported();
+    }
+
+    public boolean setFirmwareExitFrameTable(List<ExitFrame> exitFrames, int timeoutMs) {
+        byte[] timeoutBytes = new byte[2];
+        if (timeoutMs > 0xFFFF) {
+            Log.w(TAG,
+                    "Exit frame timeout is larger than 16 bits, timeout will be truncated.");
+            timeoutBytes = new byte[] {(byte) 0xFF, (byte) 0xFF};
+        } else {
+            // Convert to little endian, two byte array
+            timeoutBytes[0] = (byte) timeoutMs;
+            timeoutBytes[1] = (byte) (timeoutMs >> 8);
+        }
+
+        return mDeviceHost.setFirmwareExitFrameTable(exitFrames.toArray(ExitFrame[]::new),
+                timeoutBytes);
+    }
 }
 

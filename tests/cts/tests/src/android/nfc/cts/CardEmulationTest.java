@@ -1029,7 +1029,16 @@ public class CardEmulationTest {
                     // A timeout error indicates that we will crash the NFC service and restart it.
                     // Give the adapter state a chance to bubble up.
                     Thread.currentThread().sleep(300);
-                    if (adapter.getAdapterState() != NfcAdapter.STATE_ON) {
+                    int adapterState = NfcAdapter.STATE_OFF;
+                    while (adapterState == NfcAdapter.STATE_OFF) {
+                        try {
+                            adapterState = adapter.getAdapterState();
+                        } catch (Throwable doe) {
+                            // DOE means the service is restarting, wait and try again.
+                            Thread.currentThread().sleep(100);
+                        }
+                    }
+                    if (adapterState != NfcAdapter.STATE_ON) {
                         cardEmulation.registerNfcEventCallback(pool, callback);
                         // The adapter is restarting due to the timeout error, wait for it to
                         // turn back on.
@@ -2671,6 +2680,7 @@ public class CardEmulationTest {
     public void testApduServiceInfoConstructor() {
         ResolveInfo ndefNfceeAppInfo = new ResolveInfo();
         List<String> ndefNfceeAid = new ArrayList<String>();
+        ndefNfceeAid.add("12345678ABCDEF#");
         AidGroup ndefNfceeAidGroup = new AidGroup(ndefNfceeAid, "other");
         ArrayList<AidGroup> ndefNfceeAidStaticGroups = new ArrayList<>();
         ndefNfceeAidStaticGroups.add(ndefNfceeAidGroup);
