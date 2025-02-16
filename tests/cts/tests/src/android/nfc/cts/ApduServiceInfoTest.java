@@ -23,6 +23,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
@@ -59,6 +60,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 @RequiresFlagsEnabled(Flags.FLAG_ENABLE_NFC_MAINLINE)
@@ -296,8 +298,8 @@ public class ApduServiceInfoTest {
         ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, false,
                 "", new ArrayList<>(), mDynamicAidGroups, false,
                 0, 0, "", "", "");
-        String plFilter1 = "plFilter1";
-        String plFilter2 = "plFilter2";
+        String plFilter1 = "11";
+        String plFilter2 = "22";
 
         apduServiceInfo.addPollingLoopFilter(plFilter1, true);
         apduServiceInfo.addPollingLoopFilter(plFilter2, false);
@@ -312,8 +314,8 @@ public class ApduServiceInfoTest {
         ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
                 "", new ArrayList<>(), mDynamicAidGroups, false,
                 0, 0, "", "", "");
-        String plFilter1 = "plFilter1";
-        String plFilter2 = "plFilter2";
+        String plFilter1 = "11";
+        String plFilter2 = "22";
 
         apduServiceInfo.addPollingLoopFilter(plFilter1, true);
         apduServiceInfo.addPollingLoopFilter(plFilter2, false);
@@ -329,8 +331,8 @@ public class ApduServiceInfoTest {
         ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, false,
                 "", new ArrayList<>(), mDynamicAidGroups, false,
                 0, 0, "", "", "");
-        String plFilter1 = "plFilter1";
-        String plFilter2 = "plFilter2";
+        String plFilter1 = "11";
+        String plFilter2 = "22";
 
         apduServiceInfo.addPollingLoopFilter(plFilter1, true);
         apduServiceInfo.addPollingLoopFilter(plFilter1, true);
@@ -342,12 +344,26 @@ public class ApduServiceInfoTest {
     }
 
     @Test
+    public void test_onHostService_addPollingLoopFilter_invalidFilters() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopFilter("", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopFilter("notHex", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopFilter("001", true));
+    }
+
+    @Test
     public void test_offHostService_addPollingLoopPatternFilter() {
         ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, false,
                 "", new ArrayList<>(), mDynamicAidGroups, false,
                 0, 0, "", "", "");
-        String plFilter1 = "plFilter1";
-        String plFilter2 = "plFilter2";
+        String plFilter1 = "11";
+        String plFilter2 = "22";
 
         apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
         apduServiceInfo.addPollingLoopPatternFilter(plFilter2, false);
@@ -363,8 +379,8 @@ public class ApduServiceInfoTest {
         ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
                 "", new ArrayList<>(), mDynamicAidGroups, false,
                 0, 0, "", "", "");
-        String plFilter1 = "plFilter1";
-        String plFilter2 = "plFilter2";
+        String plFilter1 = "11";
+        String plFilter2 = "22";
 
         apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
         apduServiceInfo.addPollingLoopPatternFilter(plFilter2, false);
@@ -381,11 +397,12 @@ public class ApduServiceInfoTest {
         ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, false,
                 "", new ArrayList<>(), mDynamicAidGroups, false,
                 0, 0, "", "", "");
-        String plFilter1 = "plFilter1";
-        String plFilter2 = "plFilter2";
+        String plFilter1 = "11";
+        String plFilter2 = "22";
 
         apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
         apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
+        // Since onHost is false, non-autotransact filters are dropped.
         apduServiceInfo.addPollingLoopPatternFilter(plFilter2, false);
 
         List<String> addedFilters = apduServiceInfo.getPollingLoopPatternFilters().stream().map(
@@ -393,4 +410,127 @@ public class ApduServiceInfoTest {
         assertTrue(addedFilters.contains(plFilter1));
         assertEquals(1, addedFilters.size());
     }
+
+    @Test
+    public void test_getShouldAutoTransact() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+        String plFilter1 = "11".toUpperCase(Locale.ROOT);
+        String plFilter2 = "22".toUpperCase(Locale.ROOT);
+
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter2, false);
+
+        List<String> addedFilters = apduServiceInfo.getPollingLoopPatternFilters().stream().map(
+                Pattern::pattern).toList();
+        assertTrue(addedFilters.contains(plFilter1));
+        assertTrue(addedFilters.contains(plFilter2));
+        assertEquals(2, addedFilters.size());
+        assertTrue(apduServiceInfo.getShouldAutoTransact(plFilter1));
+        assertFalse(apduServiceInfo.getShouldAutoTransact(plFilter2));
+    }
+
+    @Test
+    public void test_getShouldAutoTransact_overwrite() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+        String plFilter1 = "11".toUpperCase(Locale.ROOT);
+        String plFilter2 = "22".toUpperCase(Locale.ROOT);
+
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter2, false);
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter2, true);
+
+        List<String> addedFilters = apduServiceInfo.getPollingLoopPatternFilters().stream().map(
+                Pattern::pattern).toList();
+        assertTrue(addedFilters.contains(plFilter1));
+        assertTrue(addedFilters.contains(plFilter2));
+        assertEquals(2, addedFilters.size());
+        assertTrue(apduServiceInfo.getShouldAutoTransact(plFilter1));
+        assertTrue(apduServiceInfo.getShouldAutoTransact(plFilter2));
+    }
+
+    @Test
+    public void test_onHostService_removePollingLoopFilter() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+        String plFilter1 = "11".toUpperCase(Locale.ROOT);
+        String plFilter2 = "22".toUpperCase(Locale.ROOT);
+
+        apduServiceInfo.addPollingLoopFilter(plFilter1, true);
+        apduServiceInfo.addPollingLoopFilter(plFilter2, false);
+
+        List<String> addedFilters = apduServiceInfo.getPollingLoopFilters();
+        assertTrue(addedFilters.contains(plFilter1));
+        assertTrue(addedFilters.contains(plFilter2));
+        assertEquals(2, addedFilters.size());
+
+        apduServiceInfo.removePollingLoopFilter(plFilter1);
+
+        addedFilters = apduServiceInfo.getPollingLoopFilters();
+        assertFalse(addedFilters.contains(plFilter1));
+        assertTrue(addedFilters.contains(plFilter2));
+        assertEquals(1, addedFilters.size());
+    }
+
+    @Test
+    public void test_onHostService_removePollingLoopPatternFilter() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+        String plFilter1 = "11".toUpperCase(Locale.ROOT);
+        String plFilter2 = "22".toUpperCase(Locale.ROOT);
+
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter1, true);
+        apduServiceInfo.addPollingLoopPatternFilter(plFilter2, false);
+
+        List<String> addedFilters = apduServiceInfo.getPollingLoopPatternFilters().stream().map(
+                Pattern::pattern).toList();
+        assertTrue(addedFilters.contains(plFilter1));
+        assertTrue(addedFilters.contains(plFilter2));
+        assertEquals(2, addedFilters.size());
+
+        apduServiceInfo.removePollingLoopPatternFilter(plFilter1);
+        addedFilters = apduServiceInfo.getPollingLoopPatternFilters().stream().map(
+                Pattern::pattern).toList();
+        assertFalse(addedFilters.contains(plFilter1));
+        assertTrue(addedFilters.contains(plFilter2));
+        assertEquals(1, addedFilters.size());
+    }
+
+    @Test
+    public void test_onHostService_addPollingLoopPatternFilter_invalidFilters() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopPatternFilter("", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopPatternFilter("*", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopPatternFilter(".*", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopPatternFilter("..AA", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopPatternFilter("A?", true));
+        assertThrows(IllegalArgumentException.class,
+                () -> apduServiceInfo.addPollingLoopPatternFilter("notHex", true));
+    }
+
+    @Test
+    public void test_shouldDefaultToObserveMode() {
+        ApduServiceInfo apduServiceInfo = new ApduServiceInfo(mResolveInfo, true,
+                "", new ArrayList<>(), mDynamicAidGroups, false,
+                0, 0, "", "", "");
+        apduServiceInfo.setShouldDefaultToObserveMode(true);
+        assertTrue(apduServiceInfo.shouldDefaultToObserveMode());
+
+        apduServiceInfo.setShouldDefaultToObserveMode(false);
+        assertFalse(apduServiceInfo.shouldDefaultToObserveMode());
+    }
+
 }
