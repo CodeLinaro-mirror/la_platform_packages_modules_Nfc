@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"No supported application for this NFC Tag"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC may be blocked"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Tap to learn how to fix."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"Allow apps to read NFC tags"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> can read NFC tags."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"The following apps can read NFC tags:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Tap to learn how to disable it."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"NFC data is being recorded"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Tap to stop recording."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Allow <xliff:g id="PKG">%1$s</xliff:g> to enable NFC?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"Yes"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"No"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"Embedded tag"</string>
 </resources>

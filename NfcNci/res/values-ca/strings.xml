@@ -51,21 +51,16 @@
     <string name="action_confirm_url_open" msgid="2280097397376867615">"Obre l\'enllaç"</string>
     <string name="tag_read_error" msgid="8591844088497440515">"Hi ha hagut un error en llegir l\'etiqueta NFC. Torna-ho a provar."</string>
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"No hi ha cap aplicació compatible amb aquesta etiqueta NFC"</string>
-    <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"És possible que l\'NFC estigui bloquejada"</string>
+    <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"És possible que NFC estigui bloquejada"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Toca per obtenir informació sobre com pots resoldre-ho."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
-    <string name="nfc_logging_alert_title" msgid="7355334076019926549">"S\'estan gravant les dades de l\'NFC"</string>
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"Permet que les aplicacions llegeixin etiquetes NFC"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> pot llegir etiquetes NFC."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"Les aplicacions següents poden llegir etiquetes NFC: <xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Toca per obtenir informació sobre com pots desactivar-ho."</string>
+    <string name="nfc_logging_alert_title" msgid="7355334076019926549">"S\'estan gravant les dades d\'NFC"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Toca per aturar la gravació."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Vols permetre que <xliff:g id="PKG">%1$s</xliff:g> activi la funció NFC?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"Sí"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"No"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"Etiqueta inserida"</string>
 </resources>

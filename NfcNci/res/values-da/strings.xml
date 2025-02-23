@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"Der er ingen understøttede apps til dette NFC-tag"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC kan være blokeret"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Tryk for at se, hvordan du løser problemet."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"Tillad, at apps læser NFC-tags"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> kan læse NFC-tags."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"Følgende apps kan læse NFC-tags:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Tryk for at se, hvordan du deaktiverer den."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"NFC-data registreres"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Tryk for at stoppe optagelsen."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Vil du give <xliff:g id="PKG">%1$s</xliff:g> tilladelse til at aktivere NFC?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"Ja"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"Nej"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"Indlejret tag"</string>
 </resources>

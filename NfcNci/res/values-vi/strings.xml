@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"Không có ứng dụng nào hỗ trợ thẻ NFC này"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC có thể bị chặn"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Nhấn để tìm hiểu cách khắc phục."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"Cho phép các ứng dụng đọc thẻ NFC"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> có thể đọc thẻ NFC."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"Những ứng dụng sau có thể đọc thẻ NFC:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Nhấn để tìm hiểu cách tắt."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"Dữ liệu về NFC đang được ghi lại"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Nhấn để dừng ghi."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Cho phép <xliff:g id="PKG">%1$s</xliff:g> bật NFC?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"Có"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"Không"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"Thẻ được nhúng"</string>
 </resources>

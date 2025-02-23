@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"ಈ NFC ಟ್ಯಾಗ್‌ಗೆ ಯಾವುದೇ ಆ್ಯಪ್‌ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC ಅನ್ನು ನಿರ್ಬಂಧಿಸಿರಬಹುದು"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"ಹೇಗೆ ಸರಿಪಡಿಸುವುದು ಎಂಬುದನ್ನು ತಿಳಿಯಲು ಟ್ಯಾಪ್ ಮಾಡಿ."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"NFC ಟ್ಯಾಗ್‌ಗಳನ್ನು ಓದಲು ಆ್ಯಪ್‌ಗಳನ್ನು ಅನುಮತಿಸಿ"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"NFC ಟ್ಯಾಗ್‌ಗಳನ್ನು <xliff:g id="APPNAMES">%1$s</xliff:g> ಓದಬಹುದು."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"ಕೆಳಗಿನ ಆ್ಯಪ್‌ಗಳು NFC ಟ್ಯಾಗ್‌ಗಳನ್ನು ಓದಬಹುದು:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"ಅದನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸುವುದು ಹೇಗೆ ಎಂಬುದನ್ನು ತಿಳಿಯಲು ಟ್ಯಾಪ್ ಮಾಡಿ."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"NFC ಡೇಟಾವನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"NFC ಅನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು <xliff:g id="PKG">%1$s</xliff:g> ಅನ್ನು ಅನುಮತಿಸಬೇಕೆ?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"ಹೌದು"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"ಇಲ್ಲ"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"ಎಂಬೆಡ್‌ ಮಾಡಿದ ಟ್ಯಾಗ್"</string>
 </resources>

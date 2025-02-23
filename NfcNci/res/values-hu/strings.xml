@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"Nem található támogatott alkalmazás ehhez az NFC-címkéhez"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"Előfordulhat, hogy le van tiltva az NFC"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Koppintással további információkhoz juthat a probléma elhárításáról."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"NFC-címkék olvasásának engedélyezése az alkalmazások számára"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"A(z) <xliff:g id="APPNAMES">%1$s</xliff:g> képes NFC-címkék olvasására."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"A következő alkalmazások képesek NFC-címkék olvasására: <xliff:g id="APPNAMES">%1$s</xliff:g>."</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Ide koppintva megtudhatja, hogyan tilthatja le."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"A rendszer rögzíti az NFC-adatokat"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Koppintson a rögzítés leállításához."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Engedélyezi a(z) <xliff:g id="PKG">%1$s</xliff:g> számára az NFC bekapcsolását?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"Igen"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"Nem"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"Beágyazott címke"</string>
 </resources>

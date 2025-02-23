@@ -53,10 +53,10 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"Nema podržane aplikacije za ovu NFC oznaku"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC je možda blokiran"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Dodirnite da saznate kako ispraviti problem."</string>
-    <string name="tag_app_alert_title" msgid="6761163540731807246">"Dopusti aplikacijama da čitaju oznake NFC"</string>
-    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> može čitati oznake NFC."</string>
-    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"Sljedeće aplikacije mogu čitati oznake NFC:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
-    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Dodirnite da biste saznali kako to onemogućiti."</string>
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"Dozvolite aplikacijama da čitaju NFC oznake"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"Aplikacije <xliff:g id="APPNAMES">%1$s</xliff:g> mogu čitati NFC oznake."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"Sljedeće aplikacije mogu čitati NFC oznake: <xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Dodirnite da saznate kako ovo onemogućiti."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"NFC podaci se trenutno bilježe"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Dodirnite da zaustavite bilježenje."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Dozvoliti da <xliff:g id="PKG">%1$s</xliff:g> omogući NFC?"</string>
