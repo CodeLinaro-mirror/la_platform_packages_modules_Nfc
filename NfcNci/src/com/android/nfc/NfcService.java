@@ -2300,12 +2300,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
                 int callingUid = Binder.getCallingUid();
                 UserHandle callingUser = Binder.getCallingUserHandle();
-                int triggerSource =
-                        NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
-                final int triggerSource_WalletRoleHolder =
-                        NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__WALLET_ROLE_HOLDER;
-                final int triggerSource_Foreground =
-                        NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
+                int triggerSource = StatsdUtils.TRIGGER_SOURCE_UNKNOWN;
+
                 if (!NfcInjector.isPrivileged(callingUid)) {
                     NfcPermissions.enforceUserPermissions(mContext);
                     if (packageName == null) {
@@ -2317,12 +2313,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             if (packageName != null) {
                                 triggerSource =
                                         packageName.equals(getWalletRoleHolder(callingUser))
-                                                ? triggerSource_WalletRoleHolder
-                                                : triggerSource_Foreground;
+                                                ? StatsdUtils.TRIGGER_SOURCE_WALLET_ROLE_HOLDER
+                                                : StatsdUtils.TRIGGER_SOURCE_FOREGROUND_APP;
                             }
                         } else {
                             if (mForegroundUtils.isInForeground(callingUid)) {
-                                triggerSource = triggerSource_Foreground;
+                                triggerSource = StatsdUtils.TRIGGER_SOURCE_FOREGROUND_APP;
                             }
                         }
                     } else {
@@ -3398,6 +3394,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 .build());
             }
             mPrefsEditor.clear();
+            if (mIsNfcUserChangeRestricted) {
+                mPrefsEditor.putBoolean(PREF_NFC_ON, getNfcOnSetting());
+            }
             mPrefsEditor.putBoolean(
                 PREF_NFC_READER_OPTION_ON, mDeviceConfigFacade.getDefaultReaderOption());
             mPrefsEditor.commit();
