@@ -42,6 +42,7 @@ python_test_host {
     test_config: "AndroidTest.xml",
     device_common_data: [
         ":NfcEmulatorTestApp",
+        ":NfcEmulatorApduApp",
         "config.yaml",
     ],
     test_options: {

@@ -34,8 +34,6 @@ class RoutingManager {
   static RoutingManager& getInstance();
   bool initialize(nfc_jni_native_data* native);
   void deinitialize();
-  void enableRoutingToHost();
-  void disableRoutingToHost();
   bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route, int aidInfo,
                      int power);
   bool removeAidRouting(const uint8_t* aid, uint8_t aidLen);
@@ -132,6 +130,7 @@ class RoutingManager {
   uint8_t mOffHostAidRoutingPowerState;
   uint8_t mHostListenTechMask;
   uint8_t mOffHostListenTechMask;
+  bool mDefaultAidRouteAdded;
   bool mDeinitializing;
   bool mEeInfoChanged;
   bool mReceivedEeInfo;

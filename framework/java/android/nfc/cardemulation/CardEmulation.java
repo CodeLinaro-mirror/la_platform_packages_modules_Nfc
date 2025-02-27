@@ -76,9 +76,11 @@ import java.util.regex.Pattern;
  * on the device.
  */
 public final class CardEmulation {
+    // TODO(b/395959119) Get this from ApduServiceInfo so we don't have to maintain it in two code
+    // locations.
     private static final Pattern AID_PATTERN = Pattern.compile("[0-9A-Fa-f]{10,32}\\*?\\#?");
-    private static final Pattern PLPF_PATTERN = Pattern.compile("[0-9A-Fa-f,\\?,\\*\\.]*");
-
+    private static final Pattern PLPF_PATTERN =
+            Pattern.compile("[0-9A-Fa-f]{2,}[0-9A-Fa-f,\\?,\\*\\.]*");
     static final String TAG = "CardEmulation";
 
     /**
@@ -496,11 +498,13 @@ public final class CardEmulation {
     /**
      * Register a polling loop pattern filter (PLPF) for a HostApduService and indicate whether it
      * should auto-transact or not. The pattern may include the characters 0-9 and A-F as well as
-     * the regular expression operators `.`, `?` and `*`. When the beginning of anon-standard
+     * the regular expression operators `.`, `?` and `*` after the first byte. When the beginning of
+     * a non-standard
      * polling loop frame matches this sequence exactly, it may be delivered to
      * {@link HostApduService#processPollingFrames(List)}. If auto-transact is set to true and this
      * service is currently preferred or there are no other services registered for this filter
      * then observe mode will also be disabled.
+     *
      * @param service The HostApduService to register the filter for
      * @param pollingLoopPatternFilter The pattern filter to register, must to be compatible with
      *         {@link java.util.regex.Pattern#compile(String)} and only contain hexadecimal numbers
@@ -508,7 +512,7 @@ public final class CardEmulation {
      * @param autoTransact true to have the NFC stack automatically disable observe mode and allow
      *         transactions to proceed when this filter matches, false otherwise
      * @return true if the filter was registered, false otherwise
-     * @throws IllegalArgumentException if the filter containst elements other than hexadecimal
+     * @throws IllegalArgumentException if the filter contains elements other than hexadecimal
      *         numbers and `.`, `?` and `*` operators
      * @throws java.util.regex.PatternSyntaxException if the regex syntax is invalid
      */
@@ -1322,16 +1326,23 @@ public final class CardEmulation {
     })
     public @interface NfcInternalErrorType {}
 
-    /** Listener for preferred service state changes. */
+    /**
+     * Callback interface for NFC-related events.
+     *
+     * These callbacks will be called when registered with
+     * {@link #registerNfcEventCallback(Executor, NfcEventCallback)} and while the registered caller
+     * is still alive. When you are done listening to the callbacks, you should unregister it with
+     * {@link #unregisterNfcEventCallback(NfcEventCallback)}.
+     */
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
     public interface NfcEventCallback {
         /**
-         * This method is called when this package gains or loses preferred Nfc service status,
-         * either the Default Wallet Role holder (see {@link
-         * android.app.role.RoleManager#ROLE_WALLET}) or the preferred service of the foreground
-         * activity set with {@link #setPreferredService(Activity, ComponentName)}
+         * This method is called when this package gains or loses preferred NFC service status.
+         * This can happen by way of either it becoming the default wallet role holder
+         * (see {@link android.app.role.RoleManager#ROLE_WALLET}) or the preferred service of the
+         * foreground activity, set with {@link #setPreferredService(Activity, ComponentName)}.
          *
-         * @param isPreferred true is this service has become the preferred Nfc service, false if it
+         * @param isPreferred true is this service has become the preferred NFC service, false if it
          *     is no longer the preferred service
          */
         @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
@@ -1367,11 +1378,9 @@ public final class CardEmulation {
         default void onAidNotRouted(@NonNull String aid) {}
 
         /**
-         * This method is called when the NFC state changes.
+         * This method is called when the NFC adapter state changes.
          *
-         * @see NfcAdapter#getAdapterState()
-         *
-         * @param state The new NFC state
+         * @param state The new NFC adapter state
          */
         @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
         default void onNfcStateChanged(@NfcAdapter.AdapterState int state) {}
@@ -1481,7 +1490,10 @@ public final class CardEmulation {
             mDeathRecipient = new IBinder.DeathRecipient() {
                 @Override
                 public void binderDied() {
-                    sService = null;
+                    synchronized (mNfcEventCallbacks) {
+                        mDeathRecipient = null;
+                        sService = null;
+                    }
                     Handler handler = new Handler(Looper.getMainLooper());
                     handler.postDelayed(new Runnable() {
                         public void run() {
@@ -1506,19 +1518,19 @@ public final class CardEmulation {
     }
 
     /**
-     * Register a listener for NFC Events.
+     * Register a callback for NFC events.
      *
      * @param executor The Executor to run the call back with
-     * @param listener The listener to register
+     * @param callback The callback to register
      */
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
     public void registerNfcEventCallback(
-            @NonNull @CallbackExecutor Executor executor, @NonNull NfcEventCallback listener) {
+            @NonNull @CallbackExecutor Executor executor, @NonNull NfcEventCallback callback) {
         if (!android.nfc.Flags.nfcEventListener()) {
             return;
         }
         synchronized (mNfcEventCallbacks) {
-            mNfcEventCallbacks.put(listener, executor);
+            mNfcEventCallbacks.put(callback, executor);
             if (mNfcEventCallbacks.size() == 1) {
                 callService(() -> sService.registerNfcEventCallback(mINfcEventCallback));
                 linkToNfcDeath();
@@ -1529,18 +1541,18 @@ public final class CardEmulation {
     private IBinder.DeathRecipient mDeathRecipient;
 
     /**
-     * Unregister a preferred service listener that was previously registered with {@link
-     * #registerNfcEventCallback(Executor, NfcEventCallback)}
+     * Unregister an NFC event callback that was previously registered with {@link
+     * #registerNfcEventCallback(Executor, NfcEventCallback)}.
      *
-     * @param listener The previously registered listener to unregister
+     * @param callback The previously registered callback to unregister
      */
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
-    public void unregisterNfcEventCallback(@NonNull NfcEventCallback listener) {
+    public void unregisterNfcEventCallback(@NonNull NfcEventCallback callback) {
         if (!android.nfc.Flags.nfcEventListener()) {
             return;
         }
         synchronized (mNfcEventCallbacks) {
-            mNfcEventCallbacks.remove(listener);
+            mNfcEventCallbacks.remove(callback);
             if (mNfcEventCallbacks.size() == 0) {
                 callService(() -> sService.unregisterNfcEventCallback(mINfcEventCallback));
                 if (mDeathRecipient != null) {
