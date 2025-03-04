@@ -525,11 +525,6 @@ public class HostEmulationManager {
         }
     }
 
-    private void setPollingLoopStateLocked(PollingLoopState state) {
-        Log.d(TAG, "Polling loop state: " + mPollingLoopState + " -> " + state);
-        mPollingLoopState = state;
-    }
-
     @TargetApi(35)
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void onPollingLoopDetected(List<PollingFrame> pollingFrames) {
@@ -607,7 +602,7 @@ public class HostEmulationManager {
                         if (serviceInfo.isOnHost()) {
                             Messenger service = bindServiceIfNeededLocked(user.getIdentifier(),
                                     serviceInfo.getComponent());
-                            setPollingLoopStateLocked(PollingLoopState.FILTER_MATCHED);
+                            mPollingLoopState = PollingLoopState.FILTER_MATCHED;
                             sendFrameToServiceLocked(service, serviceInfo.getComponent(),
                                 pollingFrame);
                         }
@@ -639,15 +634,13 @@ public class HostEmulationManager {
                             case PollingFrame.POLLING_LOOP_TYPE_A:
                                 aCount++;
                                 if (aCount > 3) {
-                                    setPollingLoopStateLocked(
-                                            PollingLoopState.DELIVERING_TO_PREFERRED);
+                                    mPollingLoopState = PollingLoopState.DELIVERING_TO_PREFERRED;
                                 }
                                 break;
                             case PollingFrame.POLLING_LOOP_TYPE_B:
                                 bCount++;
                                 if (bCount > 3) {
-                                    setPollingLoopStateLocked(
-                                            PollingLoopState.DELIVERING_TO_PREFERRED);
+                                    mPollingLoopState = PollingLoopState.DELIVERING_TO_PREFERRED;
                                 }
                                 break;
                             case PollingFrame.POLLING_LOOP_TYPE_ON:
@@ -657,8 +650,7 @@ public class HostEmulationManager {
                                 // Send the loop data if we've seen at least one on before an off.
                                 offCount++;
                                 if (onCount >= 2 && offCount >=2) {
-                                    setPollingLoopStateLocked(
-                                            PollingLoopState.DELIVERING_TO_PREFERRED);
+                                    mPollingLoopState = PollingLoopState.DELIVERING_TO_PREFERRED;
                                 }
                                 break;
                             default:
@@ -1425,7 +1417,7 @@ public class HostEmulationManager {
         mPollingFramesToSend = null;
         mUnprocessedPollingFrames = null;
         resetActiveService();
-        setPollingLoopStateLocked(PollingLoopState.EVALUATING_POLLING_LOOP);
+        mPollingLoopState = PollingLoopState.EVALUATING_POLLING_LOOP;
         mState = STATE_IDLE;
     }
 

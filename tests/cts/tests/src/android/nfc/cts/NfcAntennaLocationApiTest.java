@@ -49,10 +49,10 @@ public class NfcAntennaLocationApiTest {
 
     @Before
     public void setUp() throws Exception {
-        assumeTrue("Device must support NFC", supportsHardware());
+        assumeTrue(supportsHardware());
         mContext = InstrumentationRegistry.getContext();
         mAdapter = NfcAdapter.getDefaultAdapter(mContext);
-        assertNotNull("NFC Adapter is null", mAdapter);
+        assertNotNull(mAdapter);
     }
 
     @After

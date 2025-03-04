@@ -70,7 +70,7 @@ public class AidGroupTest {
     @Before
     public void setUp() throws NoSuchFieldException, RemoteException {
         MockitoAnnotations.initMocks(this);
-        assumeTrue("Device must support NFC HCE", supportsHardware());
+        assumeTrue(supportsHardware());
 
         mAids.add(AID_1);
         mAids.add(AID_2);

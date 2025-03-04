@@ -75,7 +75,7 @@ public class NfcFServiceInfoTest {
     @Before
     public void setUp() throws NoSuchFieldException, RemoteException {
         MockitoAnnotations.initMocks(this);
-        assumeTrue("Device must support NFC HCE", supportsHardware());
+        assumeTrue(supportsHardware());
 
         ArrayList<String> aids = new ArrayList<String>();
         aids.add(AID_1);

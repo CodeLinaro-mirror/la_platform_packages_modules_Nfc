@@ -35,8 +35,6 @@
 #include "debug_nfcsnoop.h"
 #include "nfa_api.h"
 #include "nfa_rw_api.h"
-#include "nfa_sys.h"
-#include "nfa_sys_int.h"
 #include "nfc_config.h"
 #include "nfc_int.h"
 
@@ -102,7 +100,6 @@ bool isDownloadFirmwareCompleted = false;
 bool use_aidl = false;
 uint8_t mute_tech_route_option = 0x00;
 unsigned int t5t_mute_legacy = 0;
-bool nfa_ee_route_debounce_timer = true;
 
 extern tNFA_DM_CFG nfa_dm_cfg;
 extern tNFA_PROPRIETARY_CFG nfa_proprietary_cfg;
@@ -653,12 +650,6 @@ void NfcAdaptation::Initialize() {
     }
   }
 
-  if (NfcConfig::hasKey(NAME_NFA_EE_ROUTE_DEBOUNCE_TIMER)) {
-    if (NfcConfig::getUnsigned(NAME_NFA_EE_ROUTE_DEBOUNCE_TIMER) == 0x00) {
-      nfa_ee_route_debounce_timer = false;
-    }
-  }
-
   verify_stack_non_volatile_store();
   if (NfcConfig::hasKey(NAME_PRESERVE_STORAGE) &&
       NfcConfig::getUnsigned(NAME_PRESERVE_STORAGE) == 1) {
@@ -753,16 +744,7 @@ void NfcAdaptation::DeviceShutdown() {
 ** Returns:     None.
 **
 *******************************************************************************/
-void NfcAdaptation::Dump(int fd) {
-  LOG(DEBUG) << StringPrintf("%s :enable_cplt_flags=0x%x, enable_cplt_mask=0x%x",
-                               __func__,
-                               nfa_sys_cb.enable_cplt_flags,
-                               nfa_sys_cb.enable_cplt_mask);
-  dprintf(fd, "enable_cplt_flags=0x%x, enable_cplt_mask=0x%x\n",
-          nfa_sys_cb.enable_cplt_flags,
-          nfa_sys_cb.enable_cplt_mask);
-  debug_nfcsnoop_dump(fd);
-}
+void NfcAdaptation::Dump(int fd) { debug_nfcsnoop_dump(fd); }
 
 /*******************************************************************************
 **

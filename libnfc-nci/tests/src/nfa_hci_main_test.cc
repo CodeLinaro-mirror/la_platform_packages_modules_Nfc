@@ -15,13 +15,10 @@
 //
 
 #include "nfa_hci_main.cc"
-
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
-#include "mock_gki_utils.h"
-#include "nfa_sys_main.cc"
+#include <gmock/gmock.h>
 #include "nfc_main.cc"
+#include "nfa_sys_main.cc"
 
 void ResetNfaHciCb() {
     nfa_hci_cb.msg_len = 0;
@@ -578,9 +575,7 @@ class NfaHciEvtHdlrTest : public ::testing::Test {
 protected:
     void SetUp() override {
         memset(&nfa_hci_cb, 0, sizeof(nfa_hci_cb));
-        gki_utils = new MockGkiUtils();
     }
-    void TearDown() override { gki_utils = nullptr; }
 };
 
 TEST_F(NfaHciEvtHdlrTest, EventInApiRequestRange) {

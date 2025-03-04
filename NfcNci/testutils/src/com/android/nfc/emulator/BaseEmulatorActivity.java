@@ -59,7 +59,6 @@ public abstract class BaseEmulatorActivity extends Activity {
     protected NfcAdapter mAdapter;
     protected CardEmulation mCardEmulation;
     protected RoleManager mRoleManager;
-    private boolean mIsNfcSupported;
 
     final BroadcastReceiver mReceiver =
             new BroadcastReceiver() {
@@ -85,7 +84,6 @@ public abstract class BaseEmulatorActivity extends Activity {
         mAdapter = NfcAdapter.getDefaultAdapter(this);
         mCardEmulation = CardEmulation.getInstance(mAdapter);
         mRoleManager = getSystemService(RoleManager.class);
-        mIsNfcSupported = getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC);
         IntentFilter filter = new IntentFilter(HceService.ACTION_APDU_SEQUENCE_COMPLETE);
         registerReceiver(mReceiver, filter, RECEIVER_EXPORTED);
     }
@@ -278,10 +276,7 @@ public abstract class BaseEmulatorActivity extends Activity {
 
     /** Set Listen tech */
     public void setListenTech(int listenTech) {
-        mAdapter.setDiscoveryTechnology(
-            this,
-            mIsNfcSupported ? NfcAdapter.FLAG_READER_KEEP : NfcAdapter.FLAG_READER_DISABLE,
-            listenTech);
+        mAdapter.setDiscoveryTechnology(this, NfcAdapter.FLAG_READER_KEEP, listenTech);
     }
 
     /** Reset Listen tech */

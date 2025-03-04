@@ -481,8 +481,7 @@
 /* Max number of NFCEE supported */
 #ifndef NFA_EE_MAX_EE_SUPPORTED
 /* Modified for NFC-A until we add dynamic support */
-#define NB_MEP_CONFIG 2
-#define NFA_EE_MAX_EE_SUPPORTED (5 + NB_MEP_CONFIG)
+#define NFA_EE_MAX_EE_SUPPORTED 6
 #endif
 
 /* Maximum number of AID entries per target_handle  */

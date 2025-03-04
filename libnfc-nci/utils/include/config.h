@@ -56,11 +56,8 @@ class ConfigFile {
   bool isEmpty();
   void clear();
 
-  bool updateNciCfg = false;
-
  private:
   ConfigValue& getValue(const std::string& key);
 
-  bool updateConfig(const std::string& config, ConfigValue& value);
   std::map<std::string, ConfigValue> values_;
 };

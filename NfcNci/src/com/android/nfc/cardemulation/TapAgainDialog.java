@@ -103,11 +103,7 @@ public class TapAgainDialog extends AlertActivity implements DialogInterface.OnC
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        try {
-            unregisterReceiver(mReceiver);
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Failed to unregister receiver", e);
-        }
+        unregisterReceiver(mReceiver);
     }
 
     @Override

@@ -17,7 +17,3 @@ unsigned NfcConfig::getUnsigned(const std::string&, unsigned default_value) {
     return g_fuzzed_data->ConsumeIntegral<unsigned>();
   return default_value;
 }
-
-std::vector<uint8_t> NfcConfig::getBytes(const std::string&) {
-  return g_fuzzed_data->ConsumeBytes<uint8_t>(1);
-}
