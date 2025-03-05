@@ -139,6 +139,21 @@ RoutingManager::RoutingManager()
 
   mEuiccMepMode= NfcConfig::getUnsigned(NAME_EUICC_MEP_MODE, 0x0);
 
+  if (NfcConfig::hasKey(NAME_NFCEE_EVENT_RF_DISCOVERY_OPTION)) {
+    mIsRFDiscoveryOptimized =
+        (NfcConfig::getUnsigned(NAME_NFCEE_EVENT_RF_DISCOVERY_OPTION) == 0x01
+             ? true
+             : false);
+    LOG(VERBOSE) << StringPrintf(
+        "%s: NAME_NFCEE_EVENT_RF_DISCOVERY_OPTION found : %d", fn,
+        mIsRFDiscoveryOptimized);
+  } else {
+    mIsRFDiscoveryOptimized = false;
+    LOG(VERBOSE) << StringPrintf(
+        "%s: NAME_NFCEE_EVENT_RF_DISCOVERY_OPTION not found : %d", fn,
+        mIsRFDiscoveryOptimized);
+  }
+
   memset(&mEeInfo, 0, sizeof(mEeInfo));
   mReceivedEeInfo = false;
   mSeTechMask = 0x00;
@@ -1203,12 +1218,26 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
       SyncEventGuard guard(routingManager.mEeInfoEvent);
       memcpy(&routingManager.mEeInfo, &eventData->discover_req,
              sizeof(routingManager.mEeInfo));
-      if (routingManager.mReceivedEeInfo && !routingManager.mDeinitializing) {
-        routingManager.mEeInfoChanged = true;
-        routingManager.notifyEeUpdated();
+      if (!routingManager.mIsRFDiscoveryOptimized) {
+        if (routingManager.mReceivedEeInfo && !routingManager.mDeinitializing) {
+          routingManager.mEeInfoChanged = true;
+          routingManager.notifyEeUpdated();
+        }
       }
       routingManager.mReceivedEeInfo = true;
       routingManager.mEeInfoEvent.notifyOne();
+    } break;
+
+    case NFA_EE_ENABLED_EVT: {
+      LOG(DEBUG) << StringPrintf(
+          "%s: NFA_EE_ENABLED_EVT; status=0x%X; num ee=%u", __func__,
+          eventData->discover_req.status, eventData->discover_req.num_ee);
+      if (routingManager.mIsRFDiscoveryOptimized) {
+        if (routingManager.mReceivedEeInfo && !routingManager.mDeinitializing) {
+          routingManager.mEeInfoChanged = true;
+          routingManager.notifyEeUpdated();
+        }
+      }
     } break;
 
     case NFA_EE_NO_CB_ERR_EVT:
