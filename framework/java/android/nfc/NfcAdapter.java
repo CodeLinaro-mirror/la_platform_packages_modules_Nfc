@@ -923,7 +923,7 @@ public final class NfcAdapter {
         mNfcUnlockHandlers = new HashMap<NfcUnlockHandler, INfcUnlockHandler>();
         mTagRemovedListener = null;
         mLock = new Object();
-        mControllerAlwaysOnListener = new NfcControllerAlwaysOnListener(getService());
+        mControllerAlwaysOnListener = new NfcControllerAlwaysOnListener();
         mNfcWlcStateListener = new NfcWlcStateListener(getService());
         mNfcVendorNciCallbackListener = new NfcVendorNciCallbackListener();
         mNfcOemExtension = new NfcOemExtension(mContext, this);
@@ -1807,23 +1807,9 @@ public final class NfcAdapter {
     public void setDiscoveryTechnology(@NonNull Activity activity,
             @PollTechnology int pollTechnology, @ListenTechnology int listenTechnology) {
 
-        if (listenTechnology == FLAG_LISTEN_DISABLE) {
-            synchronized (sLock) {
-                if (!sHasNfcFeature) {
-                    throw new UnsupportedOperationException();
-                }
-            }
-        } else if (pollTechnology == FLAG_READER_DISABLE) {
-            synchronized (sLock) {
-                if (!sHasCeFeature) {
-                    throw new UnsupportedOperationException();
-                }
-            }
-        } else {
-            synchronized (sLock) {
-                if (!sHasNfcFeature || !sHasCeFeature) {
-                    throw new UnsupportedOperationException();
-                }
+        synchronized (sLock) {
+            if (!sHasNfcFeature && !sHasCeFeature) {
+                throw new UnsupportedOperationException();
             }
         }
     /*
@@ -2594,11 +2580,11 @@ public final class NfcAdapter {
         }
     }
     /** @hide */
-    interface ServiceCallReturn<T> {
+    public interface ServiceCallReturn<T> {
         T call() throws RemoteException;
     }
     /** @hide */
-    static <T> T callServiceReturn(ServiceCallReturn<T> call, T defaultReturn) {
+    public static <T> T callServiceReturn(ServiceCallReturn<T> call, T defaultReturn) {
         try {
             if (sService == null) {
                 attemptDeadServiceRecovery(new RemoteException("NFC Service is null"));

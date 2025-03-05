@@ -101,6 +101,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.VibrationAttributes;
@@ -2339,7 +2340,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 + enable);
 
                 long start = SystemClock.elapsedRealtime();
+                Trace.beginSection("setObserveMode: " + enable);
                 boolean result = mDeviceHost.setObserveMode(enable);
+                Trace.endSection();
                 int latency = Math.toIntExact(SystemClock.elapsedRealtime() - start);
                 if (mStatsdUtils != null) {
                     mStatsdUtils.logObserveModeStateChanged(enable, triggerSource, latency);
@@ -3410,8 +3413,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void checkFirmware() throws RemoteException {
             if (DBG) Log.i(TAG, "checkFirmware");
             NfcPermissions.enforceAdminPermissions(mContext);
+
+            if (isNfcEnabled()) {
+                if (DBG) Log.i(TAG, "Check firmware by restarting Nfc stack");
+                restartStack();
+                return;
+            }
             FutureTask<Integer> checkFirmwareTask =
                 new FutureTask<>(() -> {
+                    if (DBG) Log.i(TAG, "Nfc is disabled, checking Firmware");
                     mDeviceHost.checkFirmware();
                     return 0;
                 });

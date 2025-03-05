@@ -1,4 +1,4 @@
-// Copyright (C) 2024 The Android Open Source Project
+// Copyright (C) 2025 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,43 +18,34 @@ package {
 }
 
 python_defaults {
-    name: "CtsNfcMultiDevicePythonDefaults",
+    name: "NfcExitFrameMultiDevicePythonDefaults",
     libs: [
         "mobly",
         "pn532-python",
         "platform-test-py-annotations",
     ],
     test_suites: [
-        // Added this test suite to CTS-V
         "general-tests",
     ],
+    version: {
+        py3: {
+            embedded_launcher: true,
+        },
+    },
 }
 
 python_test_host {
-    name: "CtsNfcHceMultiDeviceTestCases",
-    main: "cts_nfc_hce_multi_device_test.py",
-    srcs: ["cts_nfc_hce_multi_device_test.py"],
+    name: "NfcExitFrameMultiDeviceTestCases",
+    main: "nfc_exit_frame_multi_device_test.py",
+    srcs: ["nfc_exit_frame_multi_device_test.py"],
     test_config: "AndroidTest.xml",
     device_common_data: [
         ":NfcEmulatorTestApp",
-        ":NfcEmulatorApduApp",
+        "config.yaml",
     ],
     test_options: {
         unit_test: false,
         runner: "mobly",
     },
-    defaults: ["CtsNfcMultiDevicePythonDefaults"],
-}
-
-// CTS-V specific binary build target that excludes the snippet APKs.
-python_test_host {
-    name: "CtsNfcHceMultiDeviceTestCases-py-ctsv",
-    main: "cts_nfc_hce_multi_device_test.py",
-    srcs: ["cts_nfc_hce_multi_device_test.py"],
-    test_config: "AndroidTest.xml",
-    test_options: {
-        unit_test: false,
-        runner: "mobly",
-    },
-    defaults: ["CtsNfcMultiDevicePythonDefaults"],
+    defaults: ["NfcExitFrameMultiDevicePythonDefaults"],
 }
