@@ -69,7 +69,6 @@ import androidx.test.filters.RequiresDevice;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -105,12 +104,12 @@ public class NfcAdapterTest {
     public void setUp() throws NoSuchFieldException {
         MockitoAnnotations.initMocks(this);
         mContext = spy(new ContextWrapper(InstrumentationRegistry.getContext()));
-        assumeTrue(supportsHardware());
+        assumeTrue("Device must support NFC", supportsHardware());
         // Backup the original service. It is being overridden
         // when creating a mocked adapter.
         NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
-        Assume.assumeNotNull(adapter);
-        Assume.assumeTrue(NfcUtils.enableNfc(adapter, mContext));
+        Assume.assumeNotNull("NFC Adapter is null", adapter);
+        assumeTrue("NFC Adapter could not be enabled", NfcUtils.enableNfc(adapter, mContext));
     }
 
     @Test
@@ -751,12 +750,26 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresDevice
-    @Ignore
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OEM_EXTENSION)
-    public void testOemExtensionMaybeTriggerFirmwareUpdate()
+    public void testOemExtensionMaybeTriggerFirmwareUpdateWhenEnabled()
             throws InterruptedException, RemoteException {
         NfcAdapter nfcAdapter = getDefaultAdapter();
         Assert.assertNotNull(nfcAdapter);
+        NfcOemExtension nfcOemExtension = nfcAdapter.getNfcOemExtension();
+        Assert.assertNotNull(nfcOemExtension);
+        nfcOemExtension.maybeTriggerFirmwareUpdate();
+    }
+
+    @Test
+    @RequiresDevice
+    @RequiresFlagsEnabled(Flags.FLAG_NFC_OEM_EXTENSION)
+    public void testOemExtensionMaybeTriggerFirmwareUpdateWhenDisabled()
+            throws InterruptedException, RemoteException {
+        NfcAdapter nfcAdapter = getDefaultAdapter();
+        Assert.assertNotNull(nfcAdapter);
+        // Disable NFC
+        Assert.assertTrue(NfcUtils.disableNfc(nfcAdapter, mContext));
+        Assert.assertFalse(nfcAdapter.isEnabled());
         NfcOemExtension nfcOemExtension = nfcAdapter.getNfcOemExtension();
         Assert.assertNotNull(nfcOemExtension);
         nfcOemExtension.maybeTriggerFirmwareUpdate();
