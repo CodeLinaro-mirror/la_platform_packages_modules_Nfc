@@ -268,7 +268,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         return mNfcFCardEmulationInterface;
     }
 
-    @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void onPollingLoopDetected(List<PollingFrame> pollingFrames) {
         mHostEmulationManager.onPollingLoopDetected(pollingFrames);
     }
@@ -462,9 +461,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mAidCache.onServicesUpdated(userId, services);
         // Update the preferred services list
         mPreferredServices.onServicesUpdated();
-        if (android.nfc.Flags.nfcReadPollingLoop()) {
-            mHostEmulationManager.updatePollingLoopFilters(userId, services);
-        }
+        mHostEmulationManager.updatePollingLoopFilters(userId, services);
         NfcService.getInstance().onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
     }
 
@@ -842,7 +839,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
         public boolean registerPollingLoopFilterForService(int userId, ComponentName service,
                 String pollingLoopFilter, boolean autoTransact) throws RemoteException {
             NfcPermissions.validateUserId(userId);
@@ -882,7 +878,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
         public boolean removePollingLoopFilterForService(int userId, ComponentName service,
                 String pollingLoopFilter) throws RemoteException {
             NfcPermissions.validateUserId(userId);
@@ -922,7 +917,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
         public boolean registerPollingLoopPatternFilterForService(int userId, ComponentName service,
                 String pollingLoopPatternFilter, boolean autoTransact) throws RemoteException {
             NfcPermissions.validateUserId(userId);
@@ -962,7 +956,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
         public boolean removePollingLoopPatternFilterForService(int userId, ComponentName service,
                 String pollingLoopPatternFilter) throws RemoteException {
             NfcPermissions.validateUserId(userId);
@@ -1622,17 +1615,16 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     public void updateForShouldDefaultToObserveMode(int userId) {
         long token = Binder.clearCallingIdentity();
         try {
-            if (!android.nfc.Flags.nfcObserveMode()) {
-                Log.d(TAG, "observe mode isn't enabled");
-                return;
-            }
-
             NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
             if (adapter == null) {
                 Log.e(TAG, "adapter is null, returning");
                 return;
             }
-            ComponentName preferredService = mAidCache.getPreferredService().getComponentName();
+            ComponentNameAndUser preferredServiceAndUser = mAidCache.getPreferredService();
+            if (preferredServiceAndUser == null) {
+                return;
+            }
+            ComponentName preferredService = preferredServiceAndUser.getComponentName();
             boolean enableObserveMode = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
                     preferredService);
             mHostEmulationManager.updateForShouldDefaultToObserveMode(enableObserveMode);
