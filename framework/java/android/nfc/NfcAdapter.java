@@ -626,6 +626,14 @@ public final class NfcAdapter {
     }
 
     /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public static IT4tNdefNfcee getNdefNfceeService() {
+        return sNdefNfceeService;
+    }
+
+    /**
      * A listener to be invoked when NFC controller always on state changes.
      * <p>Register your {@code ControllerAlwaysOnListener} implementation with {@link
      * NfcAdapter#registerControllerAlwaysOnListener} and disable it with {@link
@@ -1183,7 +1191,6 @@ public final class NfcAdapter {
      * respond to the reader and proceed with the transaction.
      * @return true if the mode is supported, false otherwise.
      */
-    @FlaggedApi(Flags.FLAG_NFC_OBSERVE_MODE)
     public boolean isObserveModeSupported() {
         return callServiceReturn(() ->  sService.isObserveModeSupported(), false);
     }
@@ -1194,7 +1201,6 @@ public final class NfcAdapter {
      * @return true if observe mode is enabled, false otherwise.
      */
 
-    @FlaggedApi(Flags.FLAG_NFC_OBSERVE_MODE)
     public boolean isObserveModeEnabled() {
         return callServiceReturn(() ->  sService.isObserveModeEnabled(), false);
     }
@@ -1215,7 +1221,6 @@ public final class NfcAdapter {
      * @return boolean indicating success or failure.
      */
 
-    @FlaggedApi(Flags.FLAG_NFC_OBSERVE_MODE)
     public boolean setObserveModeEnabled(boolean enabled) {
         if (mContext == null) {
             throw new UnsupportedOperationException("You need a context on NfcAdapter to use the "
@@ -2543,7 +2548,6 @@ public final class NfcAdapter {
      * @hide
      */
     @TestApi
-    @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyPollingLoop(@NonNull PollingFrame pollingFrame) {
         callService(() ->  sService.notifyPollingLoop(pollingFrame));
     }
@@ -2554,7 +2558,6 @@ public final class NfcAdapter {
      *
      * @hide
      */
-    @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyTestHceData(int technology, byte[] data) {
         callService(() ->  sService.notifyTestHceData(technology, data));
     }
@@ -2608,7 +2611,6 @@ public final class NfcAdapter {
      * @hide
      */
     @TestApi
-    @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyHceDeactivated() {
         callService(() ->  sService.notifyHceDeactivated());
     }

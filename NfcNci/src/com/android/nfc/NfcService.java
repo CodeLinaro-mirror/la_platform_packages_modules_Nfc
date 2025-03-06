@@ -739,8 +739,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onPollingLoopDetected(List<PollingFrame> frames) {
-        if (mCardEmulationManager != null
-                && android.nfc.Flags.nfcReadPollingLoop()) {
+        if (mCardEmulationManager != null) {
             if (Flags.postCallbacks()) {
                 mHandler.post(() -> {
                     if (mCardEmulationManager != null) {
@@ -1260,10 +1259,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         public void onChange(boolean selfChange) {
                             if (mNfcInjector.isSatelliteModeSensitive()) {
                                 Log.i(TAG, "Satellite mode change detected");
-                                if (shouldEnableNfc()) {
-                                    new EnableDisableTask().execute(TASK_ENABLE);
+                                if(isTaskBootCompleted()) {
+                                    if (shouldEnableNfc()) {
+                                        new EnableDisableTask().execute(TASK_ENABLE);
+                                    } else {
+                                        new EnableDisableTask().execute(TASK_DISABLE);
+                                    }
                                 } else {
-                                    new EnableDisableTask().execute(TASK_DISABLE);
+                                    Log.i(TAG, "Satellite mode change detected - skip NFC init is not completed");
                                 }
                             }
                         }
@@ -1283,10 +1286,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         Log.i(TAG, "Disallow NFC user restriction changed from "
                             + mIsNfcUserRestricted + " to " + !mIsNfcUserRestricted + ".");
                         mIsNfcUserRestricted = !mIsNfcUserRestricted;
-                        if (shouldEnableNfc()) {
-                            new EnableDisableTask().execute(TASK_ENABLE);
+                        if(isTaskBootCompleted()) {
+                            if (shouldEnableNfc()) {
+                                new EnableDisableTask().execute(TASK_ENABLE);
+                            } else {
+                                new EnableDisableTask().execute(TASK_DISABLE);
+                            }
                         } else {
-                            new EnableDisableTask().execute(TASK_DISABLE);
+                            Log.i(TAG, "restriction change detected - skip NFC init is not completed");
                         }
                     }
                 },
@@ -1311,6 +1318,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         connectToSeService();
+    }
+
+    private static Boolean isTaskBootCompleted() {
+        return NfcProperties.initialized().orElse(Boolean.FALSE);
     }
 
     private void executeTaskBoot() {
@@ -2174,9 +2185,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throw new SecurityException("Change nfc state by system app is not allowed!");
             }
 
-            if(!NfcProperties.initialized().orElse(Boolean.FALSE)) {
-                Log.e(TAG, "NFC is not initialized yet:" +
-                        NfcProperties.initialized().orElse(Boolean.FALSE)) ;
+            if(!isTaskBootCompleted()) {
+                Log.e(TAG, "NFC is not initialized yet:" + isTaskBootCompleted()) ;
                 return false;
             }
 
@@ -2262,14 +2272,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (!isNfcEnabled()) {
                 Log.e(TAG, "isObserveModeSupported: NFC must be enabled but is: " + mState);
                 return false;
-            }
-            long token = Binder.clearCallingIdentity();
-            try {
-                if (!android.nfc.Flags.nfcObserveMode()) {
-                    return false;
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
             }
             return mDeviceHost.isObserveModeSupported();
         }
