@@ -934,6 +934,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public int presenceCheckDelay;
         public IBinder binder;
         public int uid;
+        public byte[] annotation;
     }
 
     final class DiscoveryTechParams {
@@ -1059,6 +1060,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(Intent.ACTION_USER_ADDED);
+        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         if (mFeatureFlags.enableDirectBootAware()) filter.addAction(Intent.ACTION_USER_UNLOCKED);
         mContext.registerReceiverForAllUsers(mReceiver, filter, null, null);
     }
@@ -2664,6 +2666,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                        saveNfcListenTech(DEFAULT_LISTEN_TECH);
                    }
                 }
+                if ((pollTech & NfcAdapter.FLAG_READER_KEEP) != 0) {
+                    pollTech = getNfcPollTech();
+                }
+                if ((listenTech & NfcAdapter.FLAG_LISTEN_KEEP) != 0) {
+                    listenTech = getNfcListenTech();
+                }
+
                 mDeviceHost.setDiscoveryTech(pollTech, listenTech);
                 applyRouting(true);
                 return;
@@ -2691,7 +2700,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 } else if (!(pollTech == NfcAdapter.FLAG_USE_ALL_TECH && // Do not call for
                                                                          // resetDiscoveryTech
                         listenTech == NfcAdapter.FLAG_USE_ALL_TECH)) {
+                    if ((pollTech & NfcAdapter.FLAG_READER_KEEP) != 0) {
+                        pollTech = getNfcPollTech();
+                    } else {
                         pollTech = getReaderModeTechMask(pollTech);
+                    }
+                    if ((listenTech & NfcAdapter.FLAG_LISTEN_KEEP) != 0) {
+                        listenTech = getNfcListenTech();
+                    }
                     try {
                         mDeviceHost.setDiscoveryTech(pollTech, listenTech);
                         mDiscoveryTechParams = new DiscoveryTechParams();
@@ -3023,6 +3039,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         : DEFAULT_PRESENCE_CHECK_DELAY;
                 mReaderModeParams.binder = binder;
                 mReaderModeParams.uid = uid;
+                mReaderModeParams.annotation = extras == null ? null
+                        : extras.getByteArray(
+                            NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION);
             }
         }
 
@@ -4444,7 +4463,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             paramsBuilder.setTechMask(techMask);
             paramsBuilder.setEnableLowPowerDiscovery(false);
         }
-
+        if (mReaderModeParams != null && mReaderModeParams.annotation != null) {
+            paramsBuilder.setTechAPollingLoopAnnotation(mReaderModeParams.annotation);
+        }
         if (mIsHceCapable) {
             // Host routing is always enabled, provided we aren't in reader mode
             if (mReaderModeParams == null || mReaderModeParams.flags == DISABLE_POLLING_FLAGS) {
@@ -5675,6 +5696,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     || action.equals(Intent.ACTION_SCREEN_OFF)
                     || action.equals(Intent.ACTION_USER_PRESENT)) {
                 handleScreenStateChanged();
+            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED) && mIsHceCapable) {
+                if (DBG) Log.d(TAG, action + " received");
+                mCardEmulationManager.onBootCompleted();
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
                 int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
                 mUserId = userId;
