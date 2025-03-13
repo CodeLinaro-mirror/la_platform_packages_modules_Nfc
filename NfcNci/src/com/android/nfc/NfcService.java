@@ -289,7 +289,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     // Time to wait for routing to be applied before watchdog
     // goes off
-    static final int ROUTING_WATCHDOG_MS = 10000;
+    static final int ROUTING_WATCHDOG_MS = 6000;
 
     // Default delay used for presence checks
     static final int DEFAULT_PRESENCE_CHECK_DELAY = 125;
@@ -334,7 +334,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int NCI_STATUS_MESSAGE_CORRUPTED = 0x02;
     private static final int NCI_STATUS_FAILED = 0x03;
     private static final int SEND_VENDOR_CMD_TIMEOUT_MS = 3_000;
-    private static final int CHECK_FIRMWARE_TIMEOUT_MS = 8_000;
+    private static final int CHECK_FIRMWARE_TIMEOUT_MS = 60_000;
     private static final int NCI_GID_PROP = 0x0F;
     private static final int NCI_MSG_PROP_ANDROID = 0x0C;
     private static final int NCI_MSG_PROP_ANDROID_POWER_SAVING = 0x01;
@@ -4725,9 +4725,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
      * get info on NDEF-NFCEE feature from HAL config file
      */
     public boolean isNdefNfceefeatureEnabled() {
-        boolean status = mDeviceHost.isNdefNfceefeatureEnabled();
-        if (DBG) Log.d(TAG, "isNdefNfceefeatureEnabled() - status:" + status);
-        return status;
+        return mDeviceHost.isNdefNfceefeatureEnabled();
     }
 
     public boolean sendData(byte[] data) {
@@ -5168,9 +5166,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (!isNfcEnabled()) break;
                     if (DBG) Log.d(TAG, "Clear routing table");
                     int clearFlags = (Integer)msg.obj;
-                    if (isNfcEnabled()) {
-                        mDeviceHost.clearRoutingEntry(clearFlags);
-                    }
+                    mDeviceHost.clearRoutingEntry(clearFlags);
                     break;
                 case MSG_UPDATE_ISODEP_PROTOCOL_ROUTE:
                     if (DBG) Log.d(TAG, "Update IsoDep Protocol Route");
