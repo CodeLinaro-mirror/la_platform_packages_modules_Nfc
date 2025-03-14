@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"ऐसा कोई ऐप्लिकेशन मौजूद नहीं है, जिससे यह एनएफ़सी टैग इस्तेमाल किया जा सके"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC को शायद ब्लॉक कर दिया गया है"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"इस समस्या को ठीक करने का तरीका जानने के लिए टैप करें."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"इन ऐप्लिकेशन को एनएफ़सी टैग का डेटा पढ़ने की अनुमति दें"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g>, एनएफ़सी टैग का डेटा पढ़ सकता है."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"ये ऐप्लिकेशन, एनएफ़सी टैग का डेटा पढ़ सकते हैं:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"इसे बंद करने का तरीका जानने के लिए टैप करें."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"एनएफ़सी का डेटा रिकाॅर्ड किया जा रहा है"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"रिकॉर्डिंग बंद करने के लिए टैप करें."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"क्या एनएफ़सी को चालू करने के लिए <xliff:g id="PKG">%1$s</xliff:g> को अनुमति देनी है?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"हां"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"नहीं"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"एम्बेड किया गया टैग"</string>
 </resources>

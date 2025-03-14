@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"या NFC टॅग साठी कोणतेही सपोर्ट करणारे ॲप्लिकेशन नाही"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC ला कदाचित ब्लॉक केले आहे"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"निराकरण कसे करायचे ते जाणून घेण्यासाठी टॅप करा."</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"ॲप्सना NFC टॅग वाचण्याची अनुमती द्या"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> NFC टॅग वाचू शकतात."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"पुढील अ‍ॅप्स NFC टॅग वाचू शकतात:<xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"ते कसे बंद करावे हे जाणून घेण्यासाठी टॅप करा."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"NFC डेटा रेकॉर्ड केला जात आहे"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"रेकॉर्डिंग थांबवण्यासाठी टॅप करा."</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"<xliff:g id="PKG">%1$s</xliff:g> ला NFC सुरू करण्याची अनुमती द्यायची आहे का?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"होय"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"नाही"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"एम्बेड केलेला टॅग"</string>
 </resources>

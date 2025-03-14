@@ -53,19 +53,14 @@
     <string name="tag_dispatch_failed" msgid="1105926115269578595">"Keine unterstützte Anwendung für dieses NFC-Tag"</string>
     <string name="nfc_blocking_alert_title" msgid="3361011027125473371">"NFC ist möglicherweise blockiert"</string>
     <string name="nfc_blocking_alert_message" msgid="6427327924471665520">"Tippen, um das Problem zu beheben"</string>
-    <!-- no translation found for tag_app_alert_title (6761163540731807246) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message (5518729638341784348) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_message_multiple (6989858224684960030) -->
-    <skip />
-    <!-- no translation found for tag_app_alert_action_button (1442462487575846704) -->
-    <skip />
+    <string name="tag_app_alert_title" msgid="6761163540731807246">"Apps erlauben, NFC-Tags zu lesen"</string>
+    <string name="tag_app_alert_message" msgid="5518729638341784348">"<xliff:g id="APPNAMES">%1$s</xliff:g> kann NFC-Tags lesen."</string>
+    <string name="tag_app_alert_message_multiple" msgid="6989858224684960030">"Die folgenden Apps können NFC-Tags lesen: <xliff:g id="APPNAMES">%1$s</xliff:g>"</string>
+    <string name="tag_app_alert_action_button" msgid="1442462487575846704">"Tippe hier, um weitere Informationen zum Deaktivieren zu erhalten."</string>
     <string name="nfc_logging_alert_title" msgid="7355334076019926549">"NFC-Daten werden aufgezeichnet"</string>
     <string name="nfc_logging_alert_message" msgid="3833608086332697579">"Tippen, um die Aufzeichnung zu beenden"</string>
     <string name="title_package_enabling_nfc" msgid="7797373366778008307">"Zulassen, dass <xliff:g id="PKG">%1$s</xliff:g> NFC aktiviert?"</string>
     <string name="enable_nfc_yes" msgid="3514504441883079276">"Ja"</string>
     <string name="enable_nfc_no" msgid="4272144216339787073">"Nein"</string>
-    <!-- no translation found for device_ndef_nfcee_service_name (1035872251333915624) -->
-    <skip />
+    <string name="device_ndef_nfcee_service_name" msgid="1035872251333915624">"Eingebettetes Tag"</string>
 </resources>
