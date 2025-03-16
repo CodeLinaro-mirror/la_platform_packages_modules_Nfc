@@ -289,7 +289,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     // Time to wait for routing to be applied before watchdog
     // goes off
-    static final int ROUTING_WATCHDOG_MS = 10000;
+    static final int ROUTING_WATCHDOG_MS = 6000;
 
     // Default delay used for presence checks
     static final int DEFAULT_PRESENCE_CHECK_DELAY = 125;
@@ -334,11 +334,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int NCI_STATUS_MESSAGE_CORRUPTED = 0x02;
     private static final int NCI_STATUS_FAILED = 0x03;
     private static final int SEND_VENDOR_CMD_TIMEOUT_MS = 3_000;
-    private static final int CHECK_FIRMWARE_TIMEOUT_MS = 8_000;
+    private static final int CHECK_FIRMWARE_TIMEOUT_MS = 60_000;
     private static final int NCI_GID_PROP = 0x0F;
     private static final int NCI_MSG_PROP_ANDROID = 0x0C;
     private static final int NCI_MSG_PROP_ANDROID_POWER_SAVING = 0x01;
-    private static final int NCI_PROP_ANDROID_QUERY_POWER_SAVING_STATUS_CMD = 0x05;
+    private static final int NCI_PROP_ANDROID_QUERY_POWER_SAVING_STATUS_CMD = 0x0A;
     private static final int POWER_STATE_SWITCH_ON = 0x01;
 
     public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
@@ -934,6 +934,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public int presenceCheckDelay;
         public IBinder binder;
         public int uid;
+        public byte[] annotation;
     }
 
     final class DiscoveryTechParams {
@@ -1059,6 +1060,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(Intent.ACTION_USER_ADDED);
+        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         if (mFeatureFlags.enableDirectBootAware()) filter.addAction(Intent.ACTION_USER_UNLOCKED);
         mContext.registerReceiverForAllUsers(mReceiver, filter, null, null);
     }
@@ -1176,8 +1178,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             addThermalStatusListener();
         }
 
-        mIsRDCapable = Flags.removalDetection() &&
-                mContext.getResources().getBoolean(R.bool.removal_detection_default);
+        mIsRDCapable = mContext.getResources().getBoolean(R.bool.removal_detection_default);
 
         mIsHceCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION) ||
@@ -2664,6 +2665,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                        saveNfcListenTech(DEFAULT_LISTEN_TECH);
                    }
                 }
+                if ((pollTech & NfcAdapter.FLAG_READER_KEEP) != 0) {
+                    pollTech = getNfcPollTech();
+                }
+                if ((listenTech & NfcAdapter.FLAG_LISTEN_KEEP) != 0) {
+                    listenTech = getNfcListenTech();
+                }
+
                 mDeviceHost.setDiscoveryTech(pollTech, listenTech);
                 applyRouting(true);
                 return;
@@ -2691,7 +2699,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 } else if (!(pollTech == NfcAdapter.FLAG_USE_ALL_TECH && // Do not call for
                                                                          // resetDiscoveryTech
                         listenTech == NfcAdapter.FLAG_USE_ALL_TECH)) {
+                    if ((pollTech & NfcAdapter.FLAG_READER_KEEP) != 0) {
+                        pollTech = getNfcPollTech();
+                    } else {
                         pollTech = getReaderModeTechMask(pollTech);
+                    }
+                    if ((listenTech & NfcAdapter.FLAG_LISTEN_KEEP) != 0) {
+                        listenTech = getNfcListenTech();
+                    }
                     try {
                         mDeviceHost.setDiscoveryTech(pollTech, listenTech);
                         mDiscoveryTechParams = new DiscoveryTechParams();
@@ -3023,6 +3038,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         : DEFAULT_PRESENCE_CHECK_DELAY;
                 mReaderModeParams.binder = binder;
                 mReaderModeParams.uid = uid;
+                mReaderModeParams.annotation = extras == null ? null
+                        : extras.getByteArray(
+                            NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION);
             }
         }
 
@@ -4444,7 +4462,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             paramsBuilder.setTechMask(techMask);
             paramsBuilder.setEnableLowPowerDiscovery(false);
         }
-
+        if (mReaderModeParams != null && mReaderModeParams.annotation != null) {
+            paramsBuilder.setTechAPollingLoopAnnotation(mReaderModeParams.annotation);
+        }
         if (mIsHceCapable) {
             // Host routing is always enabled, provided we aren't in reader mode
             if (mReaderModeParams == null || mReaderModeParams.flags == DISABLE_POLLING_FLAGS) {
@@ -4704,9 +4724,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
      * get info on NDEF-NFCEE feature from HAL config file
      */
     public boolean isNdefNfceefeatureEnabled() {
-        boolean status = mDeviceHost.isNdefNfceefeatureEnabled();
-        if (DBG) Log.d(TAG, "isNdefNfceefeatureEnabled() - status:" + status);
-        return status;
+        return mDeviceHost.isNdefNfceefeatureEnabled();
     }
 
     public boolean sendData(byte[] data) {
@@ -4831,12 +4849,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         if (mState == NfcAdapter.STATE_OFF
                                 || mState == NfcAdapter.STATE_TURNING_OFF) {
                             Log.d(TAG, "Skip commit routing when NFCC is off or turning off");
+                            if (mCommitRoutingCountDownLatch != null) {
+                                mCommitRoutingStatus = STATUS_UNKNOWN_ERROR;
+                                mCommitRoutingCountDownLatch.countDown();
+                            }
                             return;
                         }
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
                             if (mNfcOemExtensionCallback != null) {
                                 if (receiveOemCallbackResult(ACTION_ON_ROUTING_CHANGED)) {
                                     Log.e(TAG, "Oem skip commitRouting");
+                                    if (mCommitRoutingCountDownLatch != null) {
+                                        mCommitRoutingStatus = STATUS_UNKNOWN_ERROR;
+                                        mCommitRoutingCountDownLatch.countDown();
+                                    }
                                     return;
                                 }
                             }
@@ -5147,9 +5173,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (!isNfcEnabled()) break;
                     if (DBG) Log.d(TAG, "Clear routing table");
                     int clearFlags = (Integer)msg.obj;
-                    if (isNfcEnabled()) {
-                        mDeviceHost.clearRoutingEntry(clearFlags);
-                    }
+                    mDeviceHost.clearRoutingEntry(clearFlags);
                     break;
                 case MSG_UPDATE_ISODEP_PROTOCOL_ROUTE:
                     if (DBG) Log.d(TAG, "Update IsoDep Protocol Route");
@@ -5675,6 +5699,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     || action.equals(Intent.ACTION_SCREEN_OFF)
                     || action.equals(Intent.ACTION_USER_PRESENT)) {
                 handleScreenStateChanged();
+            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED) && mIsHceCapable) {
+                if (DBG) Log.d(TAG, action + " received");
+                mCardEmulationManager.onBootCompleted();
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
                 int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
                 mUserId = userId;

@@ -351,6 +351,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mHostEmulationManager.onOffHostAidSelected();
     }
 
+    public void onBootCompleted() {
+        mHostEmulationManager.onBootCompleted();
+    }
+
     public void onUserSwitched(int userId) {
         mWalletRoleObserver.onUserSwitched(userId);
         // for HCE

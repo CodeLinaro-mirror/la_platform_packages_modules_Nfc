@@ -1062,17 +1062,17 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
 
   // Check if some tech should be routed to DH
   if (!(allSeTechMask & NFA_TECHNOLOGY_MASK_A) &&
-      (mOffHostListenTechMask & NFA_TECHNOLOGY_MASK_A)) {
+      (mHostListenTechMask & NFA_TECHNOLOGY_MASK_A)) {
     hostTechMask |= NFA_TECHNOLOGY_MASK_A;
   }
   // Check if some tech should be routed to DH
   if (!(allSeTechMask & NFA_TECHNOLOGY_MASK_B) &&
-      (mOffHostListenTechMask & NFA_TECHNOLOGY_MASK_B)) {
+      (mHostListenTechMask & NFA_TECHNOLOGY_MASK_B)) {
     hostTechMask |= NFA_TECHNOLOGY_MASK_B;
   }
   // Check if some tech should be routed to DH
   if (!(allSeTechMask & NFA_TECHNOLOGY_MASK_F) &&
-      (mOffHostListenTechMask & NFA_TECHNOLOGY_MASK_F)) {
+      (mHostListenTechMask & NFA_TECHNOLOGY_MASK_F)) {
     hostTechMask |= NFA_TECHNOLOGY_MASK_F;
   }
 
@@ -1334,6 +1334,7 @@ int RoutingManager::registerT3tIdentifier(uint8_t* t3tId, uint8_t t3tIdLen) {
       return NFA_HANDLE_INVALID;
     }
     LOG(DEBUG) << StringPrintf("%s: Succeed to register system code on DH", fn);
+    mEeInfoChanged = true;
     // add handle and system code pair to the map
     mMapScbrHandle.emplace(mNfcFOnDhHandle, systemCode);
   } else {
@@ -1379,6 +1380,7 @@ void RoutingManager::deregisterT3tIdentifier(int handle) {
         tNFA_STATUS nfaStat = NFA_EeRemoveSystemCodeRouting(systemCode);
         if (nfaStat == NFA_STATUS_OK) {
           mRoutingEvent.wait();
+          mEeInfoChanged = true;
           LOG(DEBUG) << StringPrintf(
               "%s: Succeeded in deregistering system Code on DH", fn);
         } else {

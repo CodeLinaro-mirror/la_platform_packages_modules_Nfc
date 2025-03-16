@@ -571,6 +571,9 @@ void NfcAdaptation::GetVendorConfigs(
 *******************************************************************************/
 void NfcAdaptation::Initialize() {
   const char* func = "NfcAdaptation::Initialize";
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_ADAPTATION_INIT, HAL_NFC_STATUS_OK);
+  }
   // Init log tag
   android::base::InitLogging(nullptr);
   android::base::SetDefaultTag("libnfc_nci");
@@ -1078,6 +1081,9 @@ void NfcAdaptation::HalCoreInitialized(uint16_t data_len,
 bool NfcAdaptation::HalPrediscover() {
   const char* func = "NfcAdaptation::HalPrediscover";
   LOG(VERBOSE) << StringPrintf("%s", func);
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_PRE_DISCOVER, HAL_NFC_STATUS_OK);
+  }
   if (mAidlHal != nullptr) {
     Status status = mAidlHal->preDiscover();
     if (status.isOk()) {
@@ -1169,12 +1175,15 @@ bool NfcAdaptation::DownloadFirmware() {
   LOG(VERBOSE) << StringPrintf("%s: enter", func);
   HalInitialize();
   if (sVndExtnsPresent) {
-    sNfcVendorExtn->processEvent(HANDLE_DOWNLOAD_FIRMWARE_REQUEST, 0x00);
+    sNfcVendorExtn->processEvent(HANDLE_DOWNLOAD_FIRMWARE_REQUEST,
+                                 HAL_NFC_STATUS_OK);
   }
   mHalOpenCompletedEvent.lock();
   LOG(VERBOSE) << StringPrintf("%s: try open HAL", func);
   HalOpen(HalDownloadFirmwareCallback, HalDownloadFirmwareDataCallback);
-  mHalOpenCompletedEvent.wait();
+  // wait up to 60s, if not opened in this delay, give up and close anyway.
+  mHalOpenCompletedEvent.wait(60000);
+  mHalOpenCompletedEvent.unlock();
 
   LOG(VERBOSE) << StringPrintf("%s: try core init HAL", func);
   uint8_t coreInitRspParams = 0;
@@ -1329,6 +1338,7 @@ ThreadCondVar::ThreadCondVar() {
   pthread_condattr_t CondAttr;
 
   pthread_condattr_init(&CondAttr);
+  pthread_condattr_setclock(&CondAttr, CLOCK_MONOTONIC);
   pthread_cond_init(&mCondVar, &CondAttr);
 
   pthread_condattr_destroy(&CondAttr);
@@ -1357,6 +1367,41 @@ ThreadCondVar::~ThreadCondVar() { pthread_cond_destroy(&mCondVar); }
 void ThreadCondVar::wait() {
   pthread_cond_wait(&mCondVar, *this);
   pthread_mutex_unlock(*this);
+}
+
+/*******************************************************************************
+**
+** Function:    ThreadCondVar::wait()
+**
+** Description: wait on the mCondVar for the indicated amount of time (ms)
+**
+** Returns:     true if wait succeeded
+**
+*******************************************************************************/
+bool ThreadCondVar::wait(long millisec) {
+  bool retVal = false;
+  struct timespec absoluteTime;
+
+  if (clock_gettime(CLOCK_MONOTONIC, &absoluteTime) == -1) {
+    LOG(ERROR) << StringPrintf("ThreadCondVar::wait: fail get time; errno=0x%X",
+                               errno);
+  } else {
+    absoluteTime.tv_sec += millisec / 1000;
+    long ns = absoluteTime.tv_nsec + ((millisec % 1000) * 1000000);
+    if (ns > 1000000000) {
+      absoluteTime.tv_sec++;
+      absoluteTime.tv_nsec = ns - 1000000000;
+    } else
+      absoluteTime.tv_nsec = ns;
+  }
+
+  int waitResult = pthread_cond_timedwait(&mCondVar, *this, &absoluteTime);
+  if ((waitResult != 0) && (waitResult != ETIMEDOUT))
+    LOG(ERROR) << StringPrintf("ThreadCondVar::wait: fail timed wait; error=0x%X",
+                               waitResult);
+  retVal = (waitResult == 0);  // waited successfully
+  if (retVal) pthread_mutex_unlock(*this);
+  return retVal;
 }
 
 /*******************************************************************************

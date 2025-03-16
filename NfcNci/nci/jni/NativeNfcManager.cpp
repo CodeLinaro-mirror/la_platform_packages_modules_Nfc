@@ -35,7 +35,6 @@
 #include "NfcJniUtil.h"
 #include "NfcTag.h"
 #include "NfceeManager.h"
-#include "PowerSwitch.h"
 #include "RoutingManager.h"
 #include "SyncEvent.h"
 #include "android_nfc.h"
@@ -991,7 +990,6 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
         }
         sDiscoveryEnabled = false;
         sPollingEnabled = false;
-        PowerSwitch::getInstance().abort();
 
         if (!sIsDisabling && sIsNfaEnabled) {
           if (gIsDtaEnabled == true) {
@@ -1006,7 +1004,6 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
           sIsNfaEnabled = false;
           sIsDisabling = false;
         }
-        PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
         LOG(ERROR) << StringPrintf("%s: crash NFC service", __func__);
         if (nat != NULL) {
           JNIEnv* e = NULL;
@@ -1022,10 +1019,6 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
         //////////////////////////////////////////////
       }
     } break;
-
-    case NFA_DM_PWR_MODE_CHANGE_EVT:
-      PowerSwitch::getInstance().deviceManagementCallback(dmEvent, eventData);
-      break;
 
     case NFA_DM_SET_POWER_SUB_STATE_EVT: {
       LOG(DEBUG) << StringPrintf(
@@ -1165,20 +1158,15 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
         }
           FALLTHROUGH_INTENDED;
         case NCI_ANDROID_SET_PASSIVE_OBSERVER_TECH:
-        case NCI_ANDROID_PASSIVE_OBSERVE: {
+        case NCI_ANDROID_PASSIVE_OBSERVE:
+        case NCI_ANDROID_SET_TECH_A_POLLING_LOOP_ANNOTATION:
+        case NCI_ANDROID_SET_PASSIVE_OBSERVER_EXIT_FRAME: {
           gVSCmdStatus = p_param[4];
-          LOG(INFO) << StringPrintf("Observe mode RSP: status: %x",
-                                    gVSCmdStatus);
+          LOG(INFO) << StringPrintf("RSP status: %x to Android proprietary cmd %x",
+                                    gVSCmdStatus, android_sub_opcode);
           SyncEventGuard guard(gNfaVsCommand);
           gNfaVsCommand.notifyOne();
         } break;
-        case NCI_ANDROID_SET_PASSIVE_OBSERVER_EXIT_FRAME: {
-              gVSCmdStatus = p_param[4];
-              LOG(INFO) << StringPrintf("Set exit frame table RSP: status: %x",
-                                        gVSCmdStatus);
-              SyncEventGuard guard(gNfaVsCommand);
-              gNfaVsCommand.notifyOne();
-          } break;
         case NCI_ANDROID_GET_CAPS: {
           gVSCmdStatus = p_param[4];
           SyncEventGuard guard(gNfaVsCommand);
@@ -1537,8 +1525,6 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 
   struct nfc_jni_native_data* nat = getNative(e, o);
 
-  PowerSwitch& powerSwitch = PowerSwitch::getInstance();
-
   if (sIsNfaEnabled) {
     LOG(DEBUG) << StringPrintf("%s: already enabled", __func__);
     goto TheEnd;
@@ -1546,7 +1532,6 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
   if (gPartialInitMode != ENABLE_MODE_DEFAULT) {
     return doPartialInit();
   }
-  powerSwitch.initialize(PowerSwitch::FULL_POWER);
 
   {
 
@@ -1647,9 +1632,6 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
   }
 
 TheEnd:
-  if (sIsNfaEnabled) {
-    PowerSwitch::getInstance().setLevel(PowerSwitch::LOW_POWER);
-  }
   LOG(DEBUG) << StringPrintf("%s: exit", __func__);
   return sIsNfaEnabled ? JNI_TRUE : JNI_FALSE;
 }
@@ -1696,6 +1678,40 @@ static void nfcManager_configNfccConfigControl(bool flag) {
     }
 }
 
+static tNFA_STATUS setTechAPollingLoopAnnotation(JNIEnv* env, jobject o,
+                                          jbyteArray tech_a_polling_loop_annotation) {
+    if (tech_a_polling_loop_annotation == NULL) {
+      LOG(ERROR) << "annotation is null, returning early";
+      return STATUS_SUCCESS;
+    }
+    std::vector<uint8_t> command;
+    command.push_back(NCI_ANDROID_SET_TECH_A_POLLING_LOOP_ANNOTATION);
+    command.push_back(0x01);
+    command.push_back(0x00);
+
+    ScopedByteArrayRO annotationBytes(env, tech_a_polling_loop_annotation);
+    command.push_back(annotationBytes.size() + 3);
+    command.push_back(0x0a);
+    if (annotationBytes.size() > 0) {
+      command.insert(command.end(), &annotationBytes[0],
+                    &annotationBytes[annotationBytes.size()]);
+    }
+    command.push_back(0x00);
+    command.push_back(0x00);
+    SyncEventGuard guard(gNfaVsCommand);
+    tNFA_STATUS status =
+        NFA_SendVsCommand(NCI_MSG_PROP_ANDROID, command.size(), command.data(), nfaVSCallback);
+    if (status == NFA_STATUS_OK) {
+      if (!gNfaVsCommand.wait(1000)) {
+        LOG(ERROR) << StringPrintf(
+            "%s: Timed out waiting for a response to setting a polling loop annotation ",
+            __FUNCTION__);
+        gVSCmdStatus = NFA_STATUS_FAILED;
+      }
+    }
+    return gVSCmdStatus;
+}
+
 /*******************************************************************************
 **
 ** Function:        nfcManager_enableDiscovery
@@ -1716,6 +1732,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
                                        jboolean enable_lptd,
                                        jboolean reader_mode,
                                        jboolean enable_host_routing,
+                                       jbyteArray tech_a_polling_loop_annotation,
                                        jboolean restart) {
   tNFA_TECHNOLOGY_MASK tech_mask = DEFAULT_TECH_MASK;
   struct nfc_jni_native_data* nat = getNative(e, o);
@@ -1732,8 +1749,6 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     return;
   }
 
-  PowerSwitch::getInstance().setLevel(PowerSwitch::FULL_POWER);
-
   if (sRfEnabled) {
     // Stop RF discovery to reconfigure
     startRfDiscovery(false);
@@ -1742,6 +1757,8 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   // Check polling configuration
   if (tech_mask != 0) {
     stopPolling_rfDiscoveryDisabled();
+    setTechAPollingLoopAnnotation(e, o, tech_a_polling_loop_annotation);
+
     startPolling_rfDiscoveryDisabled(tech_mask);
 
     if (sPollingEnabled) {
@@ -1796,8 +1813,6 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   startRfDiscovery(true);
   sDiscoveryEnabled = true;
 
-  PowerSwitch::getInstance().setModeOn(PowerSwitch::DISCOVERY);
-
   LOG(DEBUG) << StringPrintf("%s: exit", __func__);
 }
 
@@ -1826,9 +1841,6 @@ void nfcManager_disableDiscovery(JNIEnv* e, jobject o) {
   sDiscoveryEnabled = false;
   if (sPollingEnabled) status = stopPolling_rfDiscoveryDisabled();
 
-  // if nothing is active after this, then tell the controller to power down
-  if (!PowerSwitch::getInstance().setModeOff(PowerSwitch::DISCOVERY))
-    PowerSwitch::getInstance().setLevel(PowerSwitch::LOW_POWER);
 TheEnd:
   LOG(DEBUG) << StringPrintf("%s: exit: Status = 0x%X", __func__, status);
 }
@@ -1891,7 +1903,6 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
   if (!recovery_option || !sIsRecovering) {
     RoutingManager::getInstance().onNfccShutdown();
   }
-  PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
   HciEventManager::getInstance().finalize();
 
   if (sIsNfaEnabled) {
@@ -2612,7 +2623,7 @@ static JNINativeMethod gMethods[] = {
 
     {"getLfT3tMax", "()I", (void*)nfcManager_getLfT3tMax},
 
-    {"doEnableDiscovery", "(IZZZZ)V", (void*)nfcManager_enableDiscovery},
+    {"doEnableDiscovery", "(IZZZ[BZ)V", (void*)nfcManager_enableDiscovery},
 
     {"doStartStopPolling", "(Z)V", (void*)nfcManager_doStartStopPolling},
 
@@ -2701,9 +2712,6 @@ static JNINativeMethod gMethods[] = {
 **
 *******************************************************************************/
 int register_com_android_nfc_NativeNfcManager(JNIEnv* e) {
-  LOG(DEBUG) << StringPrintf("%s: enter", __func__);
-  PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
-  LOG(DEBUG) << StringPrintf("%s: exit", __func__);
   return jniRegisterNativeMethods(e, gNativeNfcManagerClassName, gMethods,
                                   NELEM(gMethods));
 }
