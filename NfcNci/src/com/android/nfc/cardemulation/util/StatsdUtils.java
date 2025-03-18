@@ -23,7 +23,6 @@ import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
-import android.os.Bundle;
 import android.os.SystemClock;
 import android.sysprop.NfcProperties;
 import android.util.Log;
@@ -84,6 +83,13 @@ public class StatsdUtils {
             NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
     public static final int TRIGGER_SOURCE_AUTO_TRANSACT =
             NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__AUTO_TRANSACT;
+
+    public static final int PROCESSOR_UNKNOWN =
+            NfcStatsLog.NFC_AUTO_TRANSACT_REPORTED__AUTO_TRANSACT_PROCESSOR__PROCESSOR_UNKNOWN;
+    public static final int PROCESSOR_HOST =
+            NfcStatsLog.NFC_AUTO_TRANSACT_REPORTED__AUTO_TRANSACT_PROCESSOR__HOST;
+    public static final int PROCESSOR_NFCC =
+            NfcStatsLog.NFC_AUTO_TRANSACT_REPORTED__AUTO_TRANSACT_PROCESSOR__NFCC;
 
     /** Name of SE terminal to log in statsd */
     private String mSeName = "";
@@ -186,7 +192,7 @@ public class StatsdUtils {
         return CE_UNKNOWN;
     }
 
-    private void logCardEmulationEvent(int statsdCategory) {
+    void logCardEmulationEvent(int statsdCategory) {
         NfcStatsLog.write(
                 NfcStatsLog.NFC_CARDEMULATION_OCCURRED, statsdCategory, mSeName, mTransactionUid);
         resetCardEmulationEvent();
@@ -224,7 +230,10 @@ public class StatsdUtils {
         int bindingLimitMillis = 500;
         if (mBindingStartTimeMillis > 0) {
             long bindingElapsedTimeMillis = SystemClock.elapsedRealtime() - mBindingStartTimeMillis;
-            if (DBG) Log.d(TAG, "binding took " + bindingElapsedTimeMillis + " millis");
+            if (DBG) {
+                Log.d(TAG, "notifyCardEmulationEventServiceBound: binding took "
+                        + bindingElapsedTimeMillis + " millis");
+            }
             if (bindingElapsedTimeMillis >= bindingLimitMillis) {
                 logErrorEvent(NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__HCE_LATE_BINDING);
             }
@@ -279,14 +288,14 @@ public class StatsdUtils {
                 break;
             default:
                 statsdCategory = CE_OFFHOST;
-        };
+        }
         logCardEmulationEvent(statsdCategory);
     }
 
     public void logFieldChanged(boolean isOn, int fieldStrength) {
         NfcStatsLog.write(NfcStatsLog.NFC_FIELD_CHANGED,
                 isOn ? NfcStatsLog.NFC_FIELD_CHANGED__FIELD_STATUS__FIELD_ON
-                : NfcStatsLog.NFC_FIELD_CHANGED__FIELD_STATUS__FIELD_OFF, fieldStrength);
+                        : NfcStatsLog.NFC_FIELD_CHANGED__FIELD_STATUS__FIELD_OFF, fieldStrength);
 
         if (!isOn) {
             mLastGainLevel = NO_GAIN_INFORMATION;
@@ -305,11 +314,11 @@ public class StatsdUtils {
     /**
      * Log when observe mode is enabled or disabled.
      *
-     * @param enabled true if observe mode is enabled, false if it is disabled
+     * @param enabled       true if observe mode is enabled, false if it is disabled
      * @param triggerSource the source of the change, if known. This value will be ignored if
      *                      setNextObserveModeTriggerSource() has been called.
-     * @param latencyMs the amount of time that it took to enable or disable observe mode in
-     * milliseconds.
+     * @param latencyMs     the amount of time that it took to enable or disable observe mode in
+     *                      milliseconds.
      */
     public void logObserveModeStateChanged(boolean enabled, int triggerSource, int latencyMs) {
         Integer overrideTriggerSource = mStatsdUtilsContext.getObserveModeTriggerSource();
@@ -318,7 +327,22 @@ public class StatsdUtils {
                 enabled ? NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__STATE__OBSERVE_MODE_ENABLED
                         : NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__STATE__OBSERVE_MODE_DISABLED,
                 overrideTriggerSource != null ? overrideTriggerSource : triggerSource, latencyMs);
-      mStatsdUtilsContext.setObserveModeTriggerSource(null);
+        mStatsdUtilsContext.setObserveModeTriggerSource(null);
+    }
+
+    /**
+     * Log when the exit frame table is changed.
+     *
+     * @param tableSize the number of entries in the exit frame table
+     * @param timeoutMs the timeout, in milliseconds, chosen to restore observe mode
+     */
+    public void logExitFrameTableChanged(int tableSize, int timeoutMs) {
+        NfcStatsLog.write(NfcStatsLog.NFC_EXIT_FRAME_TABLE_CHANGED, tableSize, timeoutMs);
+    }
+
+    public void logAutoTransactReported(int processor, byte[] data) {
+      NfcStatsLog.write(NfcStatsLog.NFC_AUTO_TRANSACT_REPORTED, processor, data.length,
+          getFrameType(data));
     }
 
     private final HashMap<String, PollingFrameLog> pollingFrameMap = new HashMap<>();
