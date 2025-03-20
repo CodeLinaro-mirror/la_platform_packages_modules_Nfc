@@ -114,6 +114,8 @@ jmethodID gCachedNfcManagerNotifyEeProtocolSelected;
 jmethodID gCachedNfcManagerNotifyEeTechSelected;
 jmethodID gCachedNfcManagerNotifyEeListenActivated;
 jmethodID gCachedNfcManagerOnRestartRfDiscovery;
+jmethodID gCachedNfcManagerOnObserveModeDisabledInFirmware;
+jmethodID gCachedNfcManagerOnObserveModeEnabledInFirmware;
 jmethodID gCachedNfcManagerNotifyEndpointRemoved;
 
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
@@ -420,6 +422,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
         LOG(ERROR) << StringPrintf(
             "%s: NFA_SELECT_RESULT_EVT error: status = %d", __func__,
             eventData->status);
+        if (NfcTag::getInstance().retrySelect() == NFA_STATUS_OK) {
+          break;
+        }
         NFA_Deactivate(FALSE);
       }
       break;
@@ -444,6 +449,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
         /* T5T doesn't support multiproto detection logic */
         NfcTag::getInstance().setNumDiscNtf(0);
       }
+      NfcTag::getInstance().clearSelectRetryCount();
       if ((eventData->activated.activate_ntf.protocol !=
            NFA_PROTOCOL_NFC_DEP) &&
           (!isListenMode(eventData->activated))) {
@@ -817,6 +823,12 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerOnRestartRfDiscovery =
       e->GetMethodID(cls.get(), "onRestartRfDiscovery", "()V");
+
+  gCachedNfcManagerOnObserveModeDisabledInFirmware =
+      e->GetMethodID(cls.get(), "onObserveModeDisabledInFirmware", "(I[B)V");
+
+  gCachedNfcManagerOnObserveModeEnabledInFirmware =
+      e->GetMethodID(cls.get(), "onObserveModeEnabledInFirmware", "()V");
 
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
@@ -1221,7 +1233,64 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
           e->CallVoidMethod(nat->manager,
                             android::gCachedNfcManagerNotifyPollingLoopFrame,
                             (jint)param_len, dataJavaArray.get());
-
+        } break;
+        case NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF: {
+          LOG(INFO) << "Observe mode suspended NTF received";
+          gObserveModeEnabled = false;
+          struct nfc_jni_native_data* nat = getNative(NULL, NULL);
+          if (!nat) {
+              LOG(ERROR) << StringPrintf("cached nat is null");
+              return;
+          }
+          JNIEnv* e = NULL;
+          ScopedAttach attach(nat->vm, &e);
+          if (e == NULL) {
+              LOG(ERROR) << StringPrintf("jni env is null");
+              return;
+          }
+          if (param_len <= 2) {
+              LOG(ERROR) <<
+                    "Cannot parse exit frame from NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF";
+              return;
+          }
+          jint exit_frame_type = (jint) p_param[4];
+          uint16_t exit_frame_len = p_param[5];
+          ScopedLocalRef<jobject> dataJavaArray(e, e->NewByteArray(exit_frame_len));
+          if (dataJavaArray.get() == NULL) {
+              LOG(ERROR) << "fail allocate array";
+              return;
+          }
+          if (exit_frame_len > 0) {
+              e->SetByteArrayRegion((jbyteArray)dataJavaArray.get(), 0, exit_frame_len,
+                                    (jbyte*)(p_param + 6));
+              if (e->ExceptionCheck()) {
+                  e->ExceptionClear();
+                  LOG(ERROR) << "failed to fill array";
+                  return;
+              }
+          }
+          e->CallVoidMethod(nat->manager,
+                            android::gCachedNfcManagerOnObserveModeDisabledInFirmware,
+                            exit_frame_type, dataJavaArray.get());
+          return;
+        } break;
+        case NCI_ANDROID_PASSIVE_OBSERVER_RESUMED_NTF: {
+          LOG(INFO) << "Observe mode resumed NTF received";
+          gObserveModeEnabled = true;
+          struct nfc_jni_native_data *nat = getNative(NULL, NULL);
+          if (!nat) {
+              LOG(ERROR) << StringPrintf("cached nat is null");
+              return;
+          }
+          JNIEnv *e = NULL;
+          ScopedAttach attach(nat->vm, &e);
+          if (e == NULL) {
+              LOG(ERROR) << StringPrintf("jni env is null");
+              return;
+          }
+          e->CallVoidMethod(nat->manager,
+                            android::gCachedNfcManagerOnObserveModeEnabledInFirmware);
+          return;
         } break;
         case NCI_ANDROID_RESTART_RF_DISCOVERY_REQUEST_NTF: {
                 struct nfc_jni_native_data* nat = getNative(NULL, NULL);
@@ -1710,23 +1779,33 @@ static void nfcManager_configNfccConfigControl(bool flag) {
     }
 }
 
+static bool isReaderModeAnnotationSupported(JNIEnv* e, jobject o) {
+  ScopedLocalRef<jclass> cls(e, e->GetObjectClass(o));
+  jmethodID isSupported =
+      e->GetMethodID(cls.get(), "isReaderModeAnnotationSupportedCaps", "()Z");
+  return e->CallBooleanMethod(o, isSupported);
+}
+
 static tNFA_STATUS setTechAPollingLoopAnnotation(JNIEnv* env, jobject o,
                                           jbyteArray tech_a_polling_loop_annotation) {
-    if (tech_a_polling_loop_annotation == NULL) {
-      LOG(WARNING) << __func__ << ": annotation is null, returning early";
-      return STATUS_SUCCESS;
-    }
     std::vector<uint8_t> command;
     command.push_back(NCI_ANDROID_SET_TECH_A_POLLING_LOOP_ANNOTATION);
-    command.push_back(0x01);
-    command.push_back(0x00);
-
-    ScopedByteArrayRO annotationBytes(env, tech_a_polling_loop_annotation);
-    command.push_back(annotationBytes.size() + 3);
-    command.push_back(0x0a);
-    if (annotationBytes.size() > 0) {
-      command.insert(command.end(), &annotationBytes[0],
-                    &annotationBytes[annotationBytes.size()]);
+    if (tech_a_polling_loop_annotation == NULL) {
+      // Annotation is null, setting 0 annotations
+      command.push_back(0x00);
+    } else {
+      ScopedByteArrayRO annotationBytes(env, tech_a_polling_loop_annotation);
+      if (annotationBytes.size() > 0) {
+        command.push_back(0x01);
+        command.push_back(0x00);
+        command.push_back(annotationBytes.size() + 3);
+        command.push_back(0x0a);
+        command.insert(command.end(), &annotationBytes[0],
+                      &annotationBytes[annotationBytes.size()]);
+      } else {
+        // Annotation is zero length, setting 0 annotations"
+        command.push_back(0x00);
+      }
     }
     command.push_back(0x00);
     command.push_back(0x00);
@@ -1740,6 +1819,8 @@ static tNFA_STATUS setTechAPollingLoopAnnotation(JNIEnv* env, jobject o,
             __FUNCTION__);
         gVSCmdStatus = NFA_STATUS_FAILED;
       }
+    } else {
+      gVSCmdStatus = status;
     }
     return gVSCmdStatus;
 }
@@ -1790,7 +1871,9 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   // Check polling configuration
   if (tech_mask != 0) {
     stopPolling_rfDiscoveryDisabled();
-    setTechAPollingLoopAnnotation(e, o, tech_a_polling_loop_annotation);
+    if (isReaderModeAnnotationSupported(e, o)) {
+      setTechAPollingLoopAnnotation(e, o, tech_a_polling_loop_annotation);
+    }
 
     startPolling_rfDiscoveryDisabled(tech_mask);
 
@@ -3009,6 +3092,12 @@ static jboolean nfcManager_setFirmwareExitFrameTable(JNIEnv* env, jobject o,
   std::vector<uint8_t> command;
   command.push_back(NCI_ANDROID_SET_PASSIVE_OBSERVER_EXIT_FRAME);
 
+  // TODO(b/380455428)
+  // Support more than 5 exit frames if firmware allows it. If we do so, might need to send second
+  // NCI command if one is too large.
+  uint8_t more = 0x00;
+  command.push_back(more);
+
   uint8_t timeout_len = env->GetArrayLength(timeout);
   auto* timeout_arr = (uint8_t*)env->GetByteArrayElements(timeout, nullptr);
 
@@ -3018,6 +3107,12 @@ static jboolean nfcManager_setFirmwareExitFrameTable(JNIEnv* env, jobject o,
   env->ReleaseByteArrayElements(timeout, (jbyte*)timeout_arr, JNI_ABORT);
 
   uint8_t num_exit_frames = env->GetArrayLength(exit_frames);
+  if (num_exit_frames > 5) {
+      LOG(INFO)
+        << "Truncating exit frame table to 5 frames so it fits in a single NCI command. "
+        << "Original size was " << num_exit_frames;
+      num_exit_frames = 5;
+  }
   command.push_back(num_exit_frames);
 
   if (num_exit_frames > 0) {

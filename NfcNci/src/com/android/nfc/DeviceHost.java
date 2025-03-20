@@ -48,6 +48,10 @@ public interface DeviceHost {
 
         public void onPollingLoopDetected(List<PollingFrame> pollingFrames);
 
+        public void onObserveModeEnabledInFirmware();
+
+        public void onObserveModeDisabledInFirmware(PollingFrame exitFrame);
+
         public void onWlcStopped(int wpt_end_condition);
 
         public void onTagRfDiscovered(boolean discovered);
@@ -267,6 +271,8 @@ public interface DeviceHost {
     public void shutdown();
 
     public boolean setNfcSecure(boolean enable);
+
+    public boolean isReaderModeAnnotationSupported();
 
     public boolean isObserveModeSupported();
 

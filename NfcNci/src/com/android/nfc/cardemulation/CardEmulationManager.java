@@ -465,6 +465,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         // Update the preferred services list
         mPreferredServices.onServicesUpdated();
         mHostEmulationManager.updatePollingLoopFilters(userId, services);
+        if (Flags.exitFrames()) {
+            updateFirmwareExitFramesForWalletRole(userId);
+        }
         NfcService.getInstance().onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
     }
 
@@ -1722,6 +1725,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         if (android.nfc.Flags.nfcEventListener()) {
             callNfcEventCallbacks(listener -> listener.onObserveModeStateChanged(enabled));
         }
+    }
+
+    public void onObserveModeDisabledInFirmware(PollingFrame exitFrame) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            callNfcEventCallbacks(listener -> listener.onObserveModeDisabledInFirmware(exitFrame));
+        }
+        mHostEmulationManager.onObserveModeDisabledInFirmware(exitFrame);
     }
 
     @Override
