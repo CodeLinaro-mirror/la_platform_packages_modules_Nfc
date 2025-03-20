@@ -69,6 +69,7 @@ import androidx.test.filters.RequiresDevice;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -748,6 +749,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresDevice
+    @Ignore("b/404565741")
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OEM_EXTENSION)
     public void testOemExtensionMaybeTriggerFirmwareUpdateWhenEnabled()
             throws InterruptedException, RemoteException {
@@ -760,6 +762,7 @@ public class NfcAdapterTest {
 
     @Test
     @RequiresDevice
+    @Ignore("b/404565741")
     @RequiresFlagsEnabled(Flags.FLAG_NFC_OEM_EXTENSION)
     public void testOemExtensionMaybeTriggerFirmwareUpdateWhenDisabled()
             throws InterruptedException, RemoteException {
