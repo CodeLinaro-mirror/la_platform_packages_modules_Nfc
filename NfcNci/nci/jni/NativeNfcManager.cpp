@@ -420,6 +420,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
         LOG(ERROR) << StringPrintf(
             "%s: NFA_SELECT_RESULT_EVT error: status = %d", __func__,
             eventData->status);
+        if (NfcTag::getInstance().retrySelect() == NFA_STATUS_OK) {
+          break;
+        }
         NFA_Deactivate(FALSE);
       }
       break;
@@ -444,6 +447,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
         /* T5T doesn't support multiproto detection logic */
         NfcTag::getInstance().setNumDiscNtf(0);
       }
+      NfcTag::getInstance().clearSelectRetryCount();
       if ((eventData->activated.activate_ntf.protocol !=
            NFA_PROTOCOL_NFC_DEP) &&
           (!isListenMode(eventData->activated))) {
@@ -1710,23 +1714,33 @@ static void nfcManager_configNfccConfigControl(bool flag) {
     }
 }
 
+static bool isReaderModeAnnotationSupported(JNIEnv* e, jobject o) {
+  ScopedLocalRef<jclass> cls(e, e->GetObjectClass(o));
+  jmethodID isSupported =
+      e->GetMethodID(cls.get(), "isReaderModeAnnotationSupportedCaps", "()Z");
+  return e->CallBooleanMethod(o, isSupported);
+}
+
 static tNFA_STATUS setTechAPollingLoopAnnotation(JNIEnv* env, jobject o,
                                           jbyteArray tech_a_polling_loop_annotation) {
-    if (tech_a_polling_loop_annotation == NULL) {
-      LOG(WARNING) << __func__ << ": annotation is null, returning early";
-      return STATUS_SUCCESS;
-    }
     std::vector<uint8_t> command;
     command.push_back(NCI_ANDROID_SET_TECH_A_POLLING_LOOP_ANNOTATION);
-    command.push_back(0x01);
-    command.push_back(0x00);
-
-    ScopedByteArrayRO annotationBytes(env, tech_a_polling_loop_annotation);
-    command.push_back(annotationBytes.size() + 3);
-    command.push_back(0x0a);
-    if (annotationBytes.size() > 0) {
-      command.insert(command.end(), &annotationBytes[0],
-                    &annotationBytes[annotationBytes.size()]);
+    if (tech_a_polling_loop_annotation == NULL) {
+      // Annotation is null, setting 0 annotations
+      command.push_back(0x00);
+    } else {
+      ScopedByteArrayRO annotationBytes(env, tech_a_polling_loop_annotation);
+      if (annotationBytes.size() > 0) {
+        command.push_back(0x01);
+        command.push_back(0x00);
+        command.push_back(annotationBytes.size() + 3);
+        command.push_back(0x0a);
+        command.insert(command.end(), &annotationBytes[0],
+                      &annotationBytes[annotationBytes.size()]);
+      } else {
+        // Annotation is zero length, setting 0 annotations"
+        command.push_back(0x00);
+      }
     }
     command.push_back(0x00);
     command.push_back(0x00);
@@ -1740,6 +1754,8 @@ static tNFA_STATUS setTechAPollingLoopAnnotation(JNIEnv* env, jobject o,
             __FUNCTION__);
         gVSCmdStatus = NFA_STATUS_FAILED;
       }
+    } else {
+      gVSCmdStatus = status;
     }
     return gVSCmdStatus;
 }
@@ -1790,7 +1806,9 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   // Check polling configuration
   if (tech_mask != 0) {
     stopPolling_rfDiscoveryDisabled();
-    setTechAPollingLoopAnnotation(e, o, tech_a_polling_loop_annotation);
+    if (isReaderModeAnnotationSupported(e, o)) {
+      setTechAPollingLoopAnnotation(e, o, tech_a_polling_loop_annotation);
+    }
 
     startPolling_rfDiscoveryDisabled(tech_mask);
 
