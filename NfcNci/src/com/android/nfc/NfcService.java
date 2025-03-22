@@ -785,12 +785,25 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     private void restartStack() {
+        synchronized (NfcService.this) {
+            if (DBG) {
+                Log.d(TAG, "restartStack: mIsRecovering=" + mIsRecovering);
+            }
+            if (!mIsRecovering) {
+                mIsRecovering = true;
+            } else {
+                return;
+            }
+        }
+
+        if (DBG) {
+            Log.d(TAG, "restartStack: Restarting NFC Service");
+        }
         try {
             mContext.unregisterReceiver(mReceiver);
         } catch (IllegalArgumentException e) {
             Log.w(TAG, "restartStack: Failed to unregisterScreenState BroadCastReceiver: " + e);
         }
-        mIsRecovering = true;
         new EnableDisableTask().execute(TASK_DISABLE);
         new EnableDisableTask().execute(TASK_ENABLE);
     }
@@ -831,6 +844,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mCardEmulationManager.onObserveModeStateChange(enable);
             }
         }
+    }
+
+    @Override
+    public void onObserveModeDisabledInFirmware(PollingFrame exitFrame) {
+        mCardEmulationManager.onObserveModeDisabledInFirmware(exitFrame);
+        onObserveModeStateChanged(false);
+    }
+
+    @Override
+    public void onObserveModeEnabledInFirmware() {
+        onObserveModeStateChanged(true);
     }
 
     @Override
