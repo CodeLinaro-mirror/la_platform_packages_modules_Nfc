@@ -71,6 +71,8 @@ static const uint16_t DEFAULT_SYS_CODE = 0xFEFE;
 
 static const uint8_t AID_ROUTE_QUAL_PREFIX = 0x10;
 
+static Mutex sEeInfoMutex;
+static Mutex sEeInfoChangedMutex;
 
 /*******************************************************************************
 **
@@ -225,7 +227,7 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
     LOG(ERROR) << fn << ": Failed to register wildcard AID for DH";
 
   // Trigger RT update
-  mEeInfoChanged = true;
+  setEeInfoChangedFlag();
   mDefaultAidRouteAdded = false;
 
   return true;
@@ -396,13 +398,16 @@ bool RoutingManager::removeAidRouting(const uint8_t* aid, uint8_t aidLen) {
 tNFA_STATUS RoutingManager::commitRouting() {
   static const char fn[] = "RoutingManager::commitRouting";
   tNFA_STATUS nfaStat = 0;
-  if (mAidRoutingConfigured || mEeInfoChanged) {
+  sEeInfoChangedMutex.lock();
+  bool eeChanged = mEeInfoChanged;
+  mEeInfoChanged = false;
+  sEeInfoChangedMutex.unlock();
+  if (eeChanged) {
+    clearRoutingEntry(CLEAR_PROTOCOL_ENTRIES | CLEAR_TECHNOLOGY_ENTRIES);
+    updateRoutingTable();
+  }
+  if (mAidRoutingConfigured || eeChanged) {
     LOG(DEBUG) << StringPrintf("%s: RT update needed", fn);
-    if (mEeInfoChanged) {
-      clearRoutingEntry(CLEAR_PROTOCOL_ENTRIES | CLEAR_TECHNOLOGY_ENTRIES);
-      updateRoutingTable();
-      mEeInfoChanged = false;
-    }
     {
       SyncEventGuard guard(mEeUpdateEvent);
       nfaStat = NFA_EeUpdateNow();
@@ -460,6 +465,27 @@ void RoutingManager::onNfccShutdown() {
     }
   } else {
     LOG(DEBUG) << fn << ": No active EEs found";
+  }
+  //release waits
+  {
+    SyncEventGuard guard(mEeRegisterEvent);
+    mEeRegisterEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(mRoutingEvent);
+    mRoutingEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(mEeSetModeEvent);
+    mEeSetModeEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(mEePwrAndLinkCtrlEvent);
+    mEePwrAndLinkCtrlEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(mAidAddRemoveEvent);
+    mAidAddRemoveEvent.notifyOne();
   }
 }
 
@@ -829,7 +855,7 @@ void RoutingManager::updateRoutingTable() {
 void RoutingManager::updateIsoDepProtocolRoute(int route) {
   static const char fn[] = "RoutingManager::updateIsoDepProtocolRoute";
   LOG(DEBUG) << StringPrintf("%s:  New default ISO-DEP route=0x%x", fn, route);
-  mEeInfoChanged = true;
+  setEeInfoChangedFlag();
   mDefaultIsoDepRoute = route;
 }
 
@@ -845,7 +871,7 @@ void RoutingManager::updateIsoDepProtocolRoute(int route) {
 void RoutingManager::updateSystemCodeRoute(int route) {
   static const char fn[] = "RoutingManager::updateSystemCodeRoute";
   LOG(DEBUG) << StringPrintf("%s:  New default SC route=0x%x", fn, route);
-  mEeInfoChanged = true;
+  setEeInfoChangedFlag();
   mDefaultSysCodeRoute = route;
   updateDefaultRoute();
 }
@@ -948,20 +974,18 @@ void RoutingManager::updateDefaultRoute() {
       defaultAidRoute = NFC_DH_ID;
     }
 
-    // Default AID route should be added only if different from ISO-DEP route
-    if ((defaultAidRoute != mDefaultIsoDepRoute) ||
-        (mDefaultIsoDepRoute == NFC_DH_ID)) {
-      removeAidRouting(nullptr, 0);
-      uint8_t powerState = 0x01;
-      if (!mSecureNfcEnabled)
-        powerState =
-            (defaultAidRoute != 0x00) ? mOffHostAidRoutingPowerState : 0x11;
-      nfaStat = NFA_EeAddAidRouting(defaultAidRoute, 0, NULL, powerState,
-                                    AID_ROUTE_QUAL_PREFIX);
-      if (nfaStat != NFA_STATUS_OK)
-        LOG(ERROR) << fn << ": failed to register zero length AID";
-      else
-        mDefaultAidRouteAdded = true;
+    removeAidRouting(nullptr, 0);
+    uint8_t powerState = 0x01;
+    if (!mSecureNfcEnabled) {
+      powerState =
+          (defaultAidRoute != 0x00) ? mOffHostAidRoutingPowerState : 0x11;
+    }
+    nfaStat = NFA_EeAddAidRouting(defaultAidRoute, 0, NULL, powerState,
+                                  AID_ROUTE_QUAL_PREFIX);
+    if (nfaStat != NFA_STATUS_OK) {
+      LOG(ERROR) << fn << ": failed to register zero length AID";
+    } else {
+      mDefaultAidRouteAdded = true;
     }
   }
 }
@@ -999,7 +1023,13 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
   static const char fn[] = "RoutingManager::updateEeTechRouteSetting";
   tNFA_TECHNOLOGY_MASK allSeTechMask = 0x00, hostTechMask = 0x00;
 
-  LOG(DEBUG) << StringPrintf("%s:  Default route A/B=0x%x", fn,
+  // Get content of mEeInfo as it can change if a NTF is received during update
+  // of RT
+  sEeInfoMutex.lock();
+  tNFA_EE_DISCOVER_REQ localEeInfo;
+  memcpy(&localEeInfo, &mEeInfo, sizeof(mEeInfo));
+  sEeInfoMutex.unlock();
+  LOG(DEBUG) << StringPrintf("%s: Default route A/B: 0x%x", fn,
                              mDefaultOffHostRoute);
   LOG(DEBUG) << StringPrintf("%s:  Default route F=0x%x", fn,
                              mDefaultFelicaRoute);
@@ -1008,31 +1038,31 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
 
   tNFA_STATUS nfaStat;
 
-  for (uint8_t i = 0; i < mEeInfo.num_ee; i++) {
-    tNFA_HANDLE eeHandle = mEeInfo.ee_disc_info[i].ee_handle;
+  for (uint8_t i = 0; i < localEeInfo.num_ee; i++) {
+    tNFA_HANDLE eeHandle = localEeInfo.ee_disc_info[i].ee_handle;
     tNFA_TECHNOLOGY_MASK seTechMask = 0;
 
     LOG(DEBUG) << StringPrintf(
-        "%s   EE[%u] Handle=0x%04x  techA=0x%02x  techB=0x%02x  techF=0x%02x  "
-        "techBprime=0x%02x",
-        fn, i, eeHandle, mEeInfo.ee_disc_info[i].la_protocol,
-        mEeInfo.ee_disc_info[i].lb_protocol,
-        mEeInfo.ee_disc_info[i].lf_protocol,
-        mEeInfo.ee_disc_info[i].lbp_protocol);
+        "%s:   EE[%u] Handle=0x%04x  techA=0x%02x  techB="
+        "0x%02x  techF=0x%02x  techBprime=0x%02x",
+        fn, i, eeHandle, localEeInfo.ee_disc_info[i].la_protocol,
+        localEeInfo.ee_disc_info[i].lb_protocol,
+        localEeInfo.ee_disc_info[i].lf_protocol,
+        localEeInfo.ee_disc_info[i].lbp_protocol);
 
     if ((mDefaultOffHostRoute != NFC_DH_ID) &&
         (eeHandle == (mDefaultOffHostRoute | NFA_HANDLE_GROUP_EE))) {
-      if (mEeInfo.ee_disc_info[i].la_protocol != 0) {
+      if (localEeInfo.ee_disc_info[i].la_protocol != 0) {
         seTechMask |= NFA_TECHNOLOGY_MASK_A;
       }
-      if (mEeInfo.ee_disc_info[i].lb_protocol != 0) {
+      if (localEeInfo.ee_disc_info[i].lb_protocol != 0) {
         seTechMask |= NFA_TECHNOLOGY_MASK_B;
       }
     }
 
     if ((mDefaultFelicaRoute != NFC_DH_ID) &&
         (eeHandle == (mDefaultFelicaRoute | NFA_HANDLE_GROUP_EE))) {
-      if (mEeInfo.ee_disc_info[i].lf_protocol != 0) {
+      if (localEeInfo.ee_disc_info[i].lf_protocol != 0) {
         seTechMask |= NFA_TECHNOLOGY_MASK_F;
       }
     }
@@ -1195,20 +1225,22 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
 
     case NFA_EE_DISCOVER_REQ_EVT: {
       SyncEventGuard guard(routingManager.mEeInfoEvent);
+      sEeInfoMutex.lock();
       memcpy(&routingManager.mEeInfo, &eventData->discover_req,
              sizeof(routingManager.mEeInfo));
       for (int i = 0; i < eventData->discover_req.num_ee; i++) {
         LOG(DEBUG) << StringPrintf(
-            "%s; NFA_EE_DISCOVER_REQ_EVT; nfceeId=0x%X; la_proto=0x%X, "
+            "%s: NFA_EE_DISCOVER_REQ_EVT; nfceeId=0x%X; la_proto=0x%X, "
             "lb_proto=0x%x, lf_proto=0x%x",
             fn, eventData->discover_req.ee_disc_info[i].ee_handle,
             eventData->discover_req.ee_disc_info[i].la_protocol,
             eventData->discover_req.ee_disc_info[i].lb_protocol,
             eventData->discover_req.ee_disc_info[i].lf_protocol);
       }
+      sEeInfoMutex.unlock();
       if (!routingManager.mIsRFDiscoveryOptimized) {
         if (routingManager.mReceivedEeInfo && !routingManager.mDeinitializing) {
-          routingManager.mEeInfoChanged = true;
+          routingManager.setEeInfoChangedFlag();
           routingManager.notifyEeUpdated();
         }
       }
@@ -1222,7 +1254,7 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
           eventData->discover_req.status, eventData->discover_req.num_ee);
       if (routingManager.mIsRFDiscoveryOptimized) {
         if (routingManager.mReceivedEeInfo && !routingManager.mDeinitializing) {
-          routingManager.mEeInfoChanged = true;
+          routingManager.setEeInfoChangedFlag();
           routingManager.notifyEeUpdated();
         }
       }
@@ -1344,7 +1376,7 @@ int RoutingManager::registerT3tIdentifier(uint8_t* t3tId, uint8_t t3tIdLen) {
       return NFA_HANDLE_INVALID;
     }
     LOG(DEBUG) << StringPrintf("%s: Succeed to register system code on DH", fn);
-    mEeInfoChanged = true;
+    setEeInfoChangedFlag();
     // add handle and system code pair to the map
     mMapScbrHandle.emplace(mNfcFOnDhHandle, systemCode);
   } else {
@@ -1390,7 +1422,7 @@ void RoutingManager::deregisterT3tIdentifier(int handle) {
         tNFA_STATUS nfaStat = NFA_EeRemoveSystemCodeRouting(systemCode);
         if (nfaStat == NFA_STATUS_OK) {
           mRoutingEvent.wait();
-          mEeInfoChanged = true;
+          setEeInfoChangedFlag();
           LOG(DEBUG) << StringPrintf(
               "%s: Succeeded in deregistering system Code on DH", fn);
         } else {
@@ -1558,7 +1590,7 @@ void RoutingManager::setEeTechRouteUpdateRequired() {
 
   // Setting flag for Ee info changed so that
   // routing table can be updated
-  mEeInfoChanged = true;
+  setEeInfoChangedFlag();
 }
 
 /*******************************************************************************
@@ -1573,6 +1605,23 @@ void RoutingManager::setEeTechRouteUpdateRequired() {
 void RoutingManager::deinitialize() {
   onNfccShutdown();
   NFA_EeDeregister(nfaEeCallback);
+}
+
+/*******************************************************************************
+**
+** Function:        setEeInfoChangedFlag
+**
+** Description:     .
+**
+** Returns:         None
+**
+*******************************************************************************/
+void RoutingManager::setEeInfoChangedFlag() {
+  static const char fn[] = "RoutingManager::setEeInfoChangedFlag";
+  LOG(DEBUG) << StringPrintf("%s", fn);
+  sEeInfoChangedMutex.lock();
+  mEeInfoChanged = true;
+  sEeInfoChangedMutex.unlock();
 }
 
 /*******************************************************************************
