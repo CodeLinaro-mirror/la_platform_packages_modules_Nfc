@@ -151,7 +151,7 @@ static bool sIsEpDetectStarted = false;
 static bool sIsNfaEnabled = false;
 static bool sDiscoveryEnabled = false;  // is polling or listening
 static bool sPollingEnabled = false;    // is polling for tag?
-static bool sIsDisabling = false;
+bool sIsDisabling = false;
 static bool sRfEnabled = false;   // whether RF discovery is enabled
 static bool sSeRfActive = false;  // whether RF with SE is likely active
 static bool sReaderModeEnabled = false;  // whether we're only reading tags, not allowing card emu
@@ -436,6 +436,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
 
     case NFA_ACTIVATED_EVT:  // NFC link/protocol activated
     {
+      bool notListen = !isListenMode(eventData->activated);
       LOG(DEBUG) << StringPrintf(
           "%s: NFA_ACTIVATED_EVT: gIsSelectingRfInterface=%d, sIsDisabling=%d",
           __func__, gIsSelectingRfInterface, sIsDisabling);
@@ -458,47 +459,48 @@ static void nfaConnectionCallback(uint8_t connEvent,
         nativeNfcTag_setActivatedRfProtocol(activatedProtocol);
         nativeNfcTag_setActivatedRfMode(activatedMode);
       }
-      NfcTag::getInstance().setActive(true);
+      NfcTag::getInstance().setActive(notListen);
       if (sIsDisabling || !sIsNfaEnabled) break;
       gActivated = true;
 
-      updateNfcID0Param(
-          eventData->activated.activate_ntf.rf_tech_param.param.pb.nfcid0);
-      NfcTag::getInstance().setActivationState();
-      if (gIsSelectingRfInterface) {
-        nativeNfcTag_doConnectStatus(true);
-        break;
-      }
-
-      nativeNfcTag_resetPresenceCheck();
-      if (!isListenMode(eventData->activated) &&
-          (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
-           prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED)) {
-        if (!sIsAlwaysPolling) {
-          NFA_Deactivate(FALSE);
+      if (notListen) {
+        updateNfcID0Param(
+            eventData->activated.activate_ntf.rf_tech_param.param.pb.nfcid0);
+        NfcTag::getInstance().setActivationState();
+        if (gIsSelectingRfInterface) {
+          nativeNfcTag_doConnectStatus(true);
+          break;
         }
-      }
 
-      NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
-      if (NfcTag::getInstance().getNumDiscNtf()) {
-        /*If its multiprotocol tag, deactivate tag with current selected
-        protocol to sleep . Select tag with next supported protocol after
-        deactivation event is received*/
-        if (((tNFA_INTF_TYPE)eventData->activated.activate_ntf.intf_param
-                 .type == NFA_INTERFACE_FRAME)) {
-          uint8_t RW_TAG_SLP_REQ[] = {0x50, 0x00};
-          SyncEvent waitSome;
-          SyncEventGuard g(waitSome);
-          NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
-          waitSome.wait(4);
+        nativeNfcTag_resetPresenceCheck();
+        if (!isListenMode(eventData->activated) &&
+            (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
+             prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED)) {
+          if (!sIsAlwaysPolling) {
+            NFA_Deactivate(FALSE);
+          }
         }
-        NFA_Deactivate(true);
-      }
 
-      // If it activated in
-      // listen mode then it is likely for an SE transaction.
-      // Send the RF Event.
-      if (isListenMode(eventData->activated)) {
+        NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
+        if (NfcTag::getInstance().getNumDiscNtf()) {
+          /*If its multiprotocol tag, deactivate tag with current selected
+          protocol to sleep . Select tag with next supported protocol after
+          deactivation event is received*/
+          if (((tNFA_INTF_TYPE)eventData->activated.activate_ntf.intf_param
+                   .type == NFA_INTERFACE_FRAME)) {
+            uint8_t RW_TAG_SLP_REQ[] = {0x50, 0x00};
+            SyncEvent waitSome;
+            SyncEventGuard g(waitSome);
+            NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
+            waitSome.wait(4);
+          }
+          NFA_Deactivate(true);
+        }
+
+      } else {
+        // If it activated in
+        // listen mode then it is likely for an SE transaction.
+        // Send the RF Event.
         sSeRfActive = true;
         struct nfc_jni_native_data* nat = getNative(NULL, NULL);
         if (!nat) {
@@ -1787,28 +1789,22 @@ static bool isReaderModeAnnotationSupported(JNIEnv* e, jobject o) {
 }
 
 static tNFA_STATUS setTechAPollingLoopAnnotation(JNIEnv* env, jobject o,
-                                          jbyteArray tech_a_polling_loop_annotation) {
+                                                  const uint8_t* annotation_data,
+                                                  size_t annotation_size) {
     std::vector<uint8_t> command;
     command.push_back(NCI_ANDROID_SET_TECH_A_POLLING_LOOP_ANNOTATION);
-    if (tech_a_polling_loop_annotation == NULL) {
-      // Annotation is null, setting 0 annotations
+    if (annotation_data == NULL || annotation_size == 0) {
+      // Annotation is null or size is 0, setting 0 annotations
       command.push_back(0x00);
     } else {
-      ScopedByteArrayRO annotationBytes(env, tech_a_polling_loop_annotation);
-      if (annotationBytes.size() > 0) {
-        command.push_back(0x01);
-        command.push_back(0x00);
-        command.push_back(annotationBytes.size() + 3);
-        command.push_back(0x0a);
-        command.insert(command.end(), &annotationBytes[0],
-                      &annotationBytes[annotationBytes.size()]);
-      } else {
-        // Annotation is zero length, setting 0 annotations"
-        command.push_back(0x00);
-      }
+      command.push_back(0x01);                 // Number of frame entries.
+      command.push_back(0x21);                 // Position and type.
+      command.push_back(annotation_size + 3);  // Length
+      command.push_back(0x0a);                 // Waiting time
+      command.insert(command.end(), annotation_data, annotation_data + annotation_size);
+      command.push_back(0x00);
+      command.push_back(0x00);
     }
-    command.push_back(0x00);
-    command.push_back(0x00);
     SyncEventGuard guard(gNfaVsCommand);
     tNFA_STATUS status =
         NFA_SendVsCommand(NCI_MSG_PROP_ANDROID, command.size(), command.data(), nfaVSCallback);
@@ -1872,7 +1868,19 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   if (tech_mask != 0) {
     stopPolling_rfDiscoveryDisabled();
     if (isReaderModeAnnotationSupported(e, o)) {
-      setTechAPollingLoopAnnotation(e, o, tech_a_polling_loop_annotation);
+      if (reader_mode) {
+        if (tech_a_polling_loop_annotation == NULL) {
+          setTechAPollingLoopAnnotation(e, o, NULL, 0);
+        } else {
+          ScopedByteArrayRO annotationBytes(e, tech_a_polling_loop_annotation);
+          setTechAPollingLoopAnnotation(e, o,
+                                        (const uint8_t*)annotationBytes.get(),
+                                        annotationBytes.size());
+        }
+      } else {
+        uint8_t ignoreFrame[] = {0x6a, 0x01, 0xcf, 0x00, 0x00};
+        setTechAPollingLoopAnnotation(e, 0, ignoreFrame, 5);
+      }
     }
 
     startPolling_rfDiscoveryDisabled(tech_mask);
@@ -2012,7 +2020,8 @@ static jboolean doPartialDeinit() {
 *******************************************************************************/
 static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
   if (sIsShuttingDown) return false;
-  LOG(DEBUG) << StringPrintf("%s: enter", __func__);
+  LOG(DEBUG) << StringPrintf("%s: enter, sIsRecovering=%d", __func__,
+                             sIsRecovering);
   if (gPartialInitMode != ENABLE_MODE_DEFAULT) {
     return doPartialDeinit();
   }
@@ -2033,10 +2042,13 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
       NFA_DisableDtamode();
     }
 
-    tNFA_STATUS stat = NFA_Disable(TRUE /* graceful */);
+    tNFA_STATUS stat = NFA_Disable(!sIsRecovering);
     if (stat == NFA_STATUS_OK) {
       LOG(DEBUG) << StringPrintf("%s: wait for completion", __func__);
-      sNfaDisableEvent.wait();  // wait for NFA command to finish
+      if (!sNfaDisableEvent.wait(5000)) {
+        LOG(ERROR) << StringPrintf(
+            "%s: NFA_Disable() timeout, keep disabling anyway", __func__);
+      }
     } else {
       LOG(ERROR) << StringPrintf("%s: fail disable; error=0x%X", __func__,
                                  stat);
@@ -2052,6 +2064,7 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
   sIsDisabling = false;
   sReaderModeEnabled = false;
   gActivated = false;
+  sRfEnabled = false;
   sLfT3tMax = 0;
 
   {
@@ -2062,6 +2075,35 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
 
   LOG(DEBUG) << StringPrintf("%s: deregister VS callbacks", __func__);
   NFA_RegVSCback(false, &nfaVSCallback);
+  // abort any active waits
+  {
+    SyncEventGuard guard(sNfaSetPowerSubState);
+    sNfaSetPowerSubState.notifyOne();
+  }
+  {
+    SyncEventGuard guard(sNfaEnableDisablePollingEvent);
+    sNfaEnableDisablePollingEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(gNfaSetConfigEvent);
+    gNfaSetConfigEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(gNfaGetConfigEvent);
+    gNfaGetConfigEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(gNfaVsCommand);
+    gNfaVsCommand.notifyOne();
+  }
+  {
+    SyncEventGuard guard(gSendRawVsCmdEvent);
+    gSendRawVsCmdEvent.notifyOne();
+  }
+  {
+    SyncEventGuard guard(gNfaRemoveEpEvent);
+    gNfaRemoveEpEvent.notifyOne();
+  }
 
   NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
   theInstance.Finalize();
@@ -2147,7 +2189,7 @@ static jboolean nfcManager_doDownload(JNIEnv*, jobject) {
 static void nfcManager_doResetTimeouts(JNIEnv*, jobject) {
   if (sIsShuttingDown) return;
   LOG(DEBUG) << StringPrintf("%s", __func__);
-  NfcTag::getInstance().resetAllTransceiveTimeouts();
+  NfcTag::getInstance().resetAllTransceiveTimeouts(true);
 }
 
 /*******************************************************************************

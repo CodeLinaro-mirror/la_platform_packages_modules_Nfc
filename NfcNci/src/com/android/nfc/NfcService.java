@@ -257,6 +257,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int TASK_ENABLE_ALWAYS_ON = 4;
     static final int TASK_DISABLE_ALWAYS_ON = 5;
 
+    // SE selected types
+    public static final int SE_SELECTED_AID = 0x01;
+    public static final int SE_SELECTED_TECH = 0x02;
+    public static final int SE_SELECTED_PROTOCOL = 0x04;
+
     // Polling technology masks
     static final int NFC_POLL_A = 0x01;
     static final int NFC_POLL_B = 0x02;
@@ -739,15 +744,30 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    List<PollingFrame> mPollingFramesToBeSent = new ArrayList<>();
+    final Runnable mPollingLoopsDetectedRunnable = new Runnable() {
+        public void run() {
+            List<PollingFrame> frames;
+            synchronized (mPollingLoopsDetectedRunnable) {
+                frames = mPollingFramesToBeSent;
+                mPollingFramesToBeSent = new ArrayList<>();
+            }
+            if (mCardEmulationManager != null) {
+                mCardEmulationManager.onPollingLoopDetected(new ArrayList<>(frames));
+            }
+        }
+    };
+
     @Override
     public void onPollingLoopDetected(List<PollingFrame> frames) {
         if (mCardEmulationManager != null) {
             if (Flags.postCallbacks()) {
-                mHandler.post(() -> {
-                    if (mCardEmulationManager != null) {
-                        mCardEmulationManager.onPollingLoopDetected(frames);
+                synchronized (mPollingLoopsDetectedRunnable) {
+                    mPollingFramesToBeSent.addAll(frames);
+                    if (!mHandler.hasCallbacks(mPollingLoopsDetectedRunnable)) {
+                        mHandler.post(mPollingLoopsDetectedRunnable);
                     }
-                });
+                }
             } else {
                 mCardEmulationManager.onPollingLoopDetected((frames));
             }
@@ -777,20 +797,35 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mRtUpdateScheduledTask =
                 mRtUpdateScheduler.schedule(
                     () -> {
-                        if (DBG) Log.d(TAG, "onEeUpdated: ApplyRoutingTask");
-                        new ApplyRoutingTask().execute();
+                        if (mIsHceCapable) {
+                            if (DBG) Log.d(TAG, "onEeUpdated: trigger routing table update");
+                            mCardEmulationManager.onTriggerRoutingTableUpdate();
+                        }
                     },
                     50,
                     TimeUnit.MILLISECONDS);
     }
 
     private void restartStack() {
+        synchronized (NfcService.this) {
+            if (DBG) {
+                Log.d(TAG, "restartStack: mIsRecovering=" + mIsRecovering);
+            }
+            if (!mIsRecovering) {
+                mIsRecovering = true;
+            } else {
+                return;
+            }
+        }
+
+        if (DBG) {
+            Log.d(TAG, "restartStack: Restarting NFC Service");
+        }
         try {
             mContext.unregisterReceiver(mReceiver);
         } catch (IllegalArgumentException e) {
             Log.w(TAG, "restartStack: Failed to unregisterScreenState BroadCastReceiver: " + e);
         }
-        mIsRecovering = true;
         new EnableDisableTask().execute(TASK_DISABLE);
         new EnableDisableTask().execute(TASK_ENABLE);
     }
@@ -872,8 +907,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     @Override
-    public void onSeSelected() {
-        sendMessage(MSG_SE_SELECTED_EVENT, null);
+    public void onSeSelected(int type) {
+        sendMessage(MSG_SE_SELECTED_EVENT, type);
     }
 
     @Override
@@ -1139,8 +1174,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         mAlarmManager = mContext.getSystemService(AlarmManager.class);
 
-        mCheckDisplayStateForScreenState =
-                mContext.getResources().getBoolean(R.bool.check_display_state_for_screen_state);
+        mCheckDisplayStateForScreenState = mDeviceConfigFacade.getCheckDisplayStateForScreenState();
         if (mInProvisionMode) {
             mScreenState = mScreenStateHelper.checkScreenStateProvisionMode();
         } else {
@@ -1228,13 +1262,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         // Polling delay count for switching from stage one to stage two.
-        mPollDelayCountMax =
-                mContext.getResources().getInteger(R.integer.unknown_tag_polling_delay_count_max);
+        mPollDelayCountMax = mDeviceConfigFacade.getUnknownTagPollingDelayMax();
         // Stage one: polling delay time for the first few unknown tag detections
-        mPollDelayTime = mContext.getResources().getInteger(R.integer.unknown_tag_polling_delay);
+        mPollDelayTime = mDeviceConfigFacade.getUnknownTagPollingDelay();
         // Stage two: longer polling delay time after max_poll_delay_count
-        mPollDelayTimeLong =
-                mContext.getResources().getInteger(R.integer.unknown_tag_polling_delay_long);
+        mPollDelayTimeLong = mDeviceConfigFacade.getUnknownTagPollingDelayLong();
         // Polling delay if read error found more than max count.
         mReadErrorCountMax =
                 mContext.getResources().getInteger(R.integer.unknown_tag_read_error_count_max);
@@ -1242,7 +1274,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mNotifyDispatchFailed = mContext.getResources().getBoolean(R.bool.enable_notify_dispatch_failed);
         mNotifyReadFailed = mContext.getResources().getBoolean(R.bool.enable_notify_read_failed);
 
-        mPollingDisableAllowed = mContext.getResources().getBoolean(R.bool.polling_disable_allowed);
+        mPollingDisableAllowed = mDeviceConfigFacade.getPollingDisableAllowed();
         mAppInActivityDetectionTime =
             mContext.getResources().getInteger(R.integer.inactive_presence_check_allowed_time);
         mTagRemovalDetectionWaitTime =
@@ -1250,8 +1282,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         // Make sure this is only called when object construction is complete.
         mNfcInjector.getNfcManagerRegisterer().register(mNfcAdapter);
 
-        mIsAlwaysOnSupported =
-            mContext.getResources().getBoolean(R.bool.nfcc_always_on_allowed);
+        mIsAlwaysOnSupported = mDeviceConfigFacade.getNfccAlwaysOnAllowed();
 
         mIsTagAppPrefSupported =
             mContext.getResources().getBoolean(R.bool.tag_intent_app_pref_supported);
@@ -1333,8 +1364,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         executeTaskBoot();  // do blocking boot tasks
 
         if ((NFC_SNOOP_LOG_MODE.equals(NfcProperties.snoop_log_mode_values.FULL) ||
-            NFC_VENDOR_DEBUG_ENABLED) && mContext.getResources().getBoolean(
-                    R.bool.enable_developer_option_notification)) {
+            NFC_VENDOR_DEBUG_ENABLED) &&
+                mDeviceConfigFacade.getEnableDeveloperNotification()) {
             new NfcDeveloperOptionNotification(mContext).startNotification();
         }
 
@@ -1348,7 +1379,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private void executeTaskBoot() {
         // If overlay is set, delay the NFC boot up until the OEM extension indicates it is ready to
         // proceed with NFC bootup.
-        if (mContext.getResources().getBoolean(R.bool.enable_oem_extension)) {
+        if (mDeviceConfigFacade.getEnableOemExtension()) {
             // Send intent for OEM extension to initialize.
             Intent intent = new Intent(NfcOemExtension.ACTION_OEM_EXTENSION_INIT);
             mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT, BIND_NFC_SERVICE);
@@ -2506,7 +2537,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
                 if (mIsHceCapable) {
                     // update HCE/HCEF routing and commitRouting if Nfc is enabled
-                    mCardEmulationManager.onSecureNfcToggled();
+                    mCardEmulationManager.onTriggerRoutingTableUpdate();
                 } else if (isNfcEnabled()) {
                     // commit only tech/protocol route without HCE support
                     mDeviceHost.commitRouting();
@@ -3558,6 +3589,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public int commitRouting() throws RemoteException {
+            if (isNfcDisabledOrDisabling()) {
+                Log.d(TAG, "Skip commit routing when NFCC is off "
+                        + "or turning off");
+                return STATUS_UNKNOWN_ERROR;
+            }
             if (DBG) Log.i(TAG, "commitRouting");
             NfcPermissions.enforceAdminPermissions(mContext);
             return mDeviceHost.commitRouting();
@@ -4270,6 +4306,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    boolean isNfcDisabledOrDisabling() {
+        synchronized (this) {
+            return (mState == NfcAdapter.STATE_OFF || mState == NfcAdapter.STATE_TURNING_OFF);
+        }
+    }
+
     boolean isNfcEnabled() {
         synchronized (this) {
             return mState == NfcAdapter.STATE_ON;
@@ -4727,6 +4769,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public int commitRouting(boolean isOverrideOrRecover) {
         if (!isOverrideOrRecover) {
+            // Clear the Handler queue, only last commit_msg is relevant
+            mHandler.removeMessages(MSG_COMMIT_ROUTING);
             mHandler.sendEmptyMessage(MSG_COMMIT_ROUTING);
             return STATUS_OK;
         }
@@ -4909,8 +4953,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 case MSG_COMMIT_ROUTING: {
                     Log.d(TAG, "handleMessage: MSG_COMMIT_ROUTING");
                     synchronized (NfcService.this) {
-                        if (mState == NfcAdapter.STATE_OFF
-                                || mState == NfcAdapter.STATE_TURNING_OFF) {
+                        if (isNfcDisabledOrDisabling()) {
                             Log.d(TAG, "handleMessage: Skip commit routing when NFCC is off "
                                     + "or turning off");
                             if (mCommitRoutingCountDownLatch != null) {
@@ -5230,7 +5273,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
                 case MSG_SE_SELECTED_EVENT:
                     Log.d(TAG, "handleMessage: MSG_SE_SELECTED_EVENT");
-                    if (mCardEmulationManager != null) {
+                    int type = (int) msg.obj;
+                    if (mCardEmulationManager != null && type == SE_SELECTED_AID) {
                         mCardEmulationManager.onOffHostAidSelected();
                     }
                     break;
@@ -5829,8 +5873,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 applyScreenState(mScreenStateHelper.checkScreenState(mCheckDisplayStateForScreenState));
 
                 if ((NFC_SNOOP_LOG_MODE.equals(NfcProperties.snoop_log_mode_values.FULL) ||
-                        NFC_VENDOR_DEBUG_ENABLED) && mContext.getResources().getBoolean(
-                                R.bool.enable_developer_option_notification)) {
+                        NFC_VENDOR_DEBUG_ENABLED) &&
+                        mDeviceConfigFacade.getEnableDeveloperNotification()){
                     new NfcDeveloperOptionNotification(mContext.createContextAsUser(
                             UserHandle.of(ActivityManager.getCurrentUser()), /*flags=*/0))
                             .startNotification();
@@ -5844,8 +5888,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 setPaymentForegroundPreference(userId);
 
                 if ((NFC_SNOOP_LOG_MODE.equals(NfcProperties.snoop_log_mode_values.FULL) ||
-                        NFC_VENDOR_DEBUG_ENABLED) && mContext.getResources().getBoolean(
-                        R.bool.enable_developer_option_notification)) {
+                        NFC_VENDOR_DEBUG_ENABLED) &&
+                        mDeviceConfigFacade.getEnableDeveloperNotification()) {
                     new NfcDeveloperOptionNotification(mContext.createContextAsUser(
                             UserHandle.of(ActivityManager.getCurrentUser()), /*flags=*/0))
                             .startNotification();

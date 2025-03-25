@@ -68,6 +68,7 @@ import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 import com.android.nfc.R;
+import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.cardemulation.util.TelephonyUtils;
 import com.android.nfc.flags.Flags;
 import com.android.nfc.proto.NfcEventProto;
@@ -155,6 +156,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     private final int mVendorApiLevel;
     private PreferredSubscriptionService mPreferredSubscriptionService = null;
     private TelephonyUtils mTelephonyUtils = null;
+    @Nullable
+    private final StatsdUtils mStatsdUtils;
+    private final DeviceConfigFacade mDeviceConfigFacade;
 
     // TODO: Move this object instantiation and dependencies to NfcInjector.
     public CardEmulationManager(Context context, NfcInjector nfcInjector,
@@ -191,6 +195,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mVendorApiLevel = SystemProperties.getInt(
                 "ro.vendor.api_level", Build.VERSION.DEVICE_INITIAL_SDK_INT);
         mPreferredSubscriptionService = new PreferredSubscriptionService(mContext, this);
+        mStatsdUtils = nfcInjector.getStatsdUtils();
+        mDeviceConfigFacade = deviceConfigFacade;
         initialize();
     }
 
@@ -209,7 +215,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             RoutingOptionManager routingOptionManager,
             PowerManager powerManager,
             NfcEventLog nfcEventLog,
-            PreferredSubscriptionService preferredSubscriptionService) {
+            PreferredSubscriptionService preferredSubscriptionService,
+            StatsdUtils statsdUtils,
+            DeviceConfigFacade deviceConfigFacade) {
         mContext = context;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
@@ -231,6 +239,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mVendorApiLevel = SystemProperties.getInt(
                 "ro.vendor.api_level", Build.VERSION.DEVICE_INITIAL_SDK_INT);
         mPreferredSubscriptionService = preferredSubscriptionService;
+        mStatsdUtils = statsdUtils;
+        mDeviceConfigFacade = deviceConfigFacade;
         initialize();
     }
 
@@ -287,7 +297,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "onHostCardEmulationActivated: failed", e);
             }
         }
-        if (mContext.getResources().getBoolean(R.bool.indicate_user_activity_for_hce)
+        if (mDeviceConfigFacade.getIndicateUserActivityForHce()
                 && mPowerManager != null) {
             // Use USER_ACTIVITY_FLAG_INDIRECT to applying power hints without resets
             // the screen timeout
@@ -394,9 +404,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mEnabledNfcFServices.onNfcDisabled();
     }
 
-    public void onSecureNfcToggled() {
-        mAidCache.onSecureNfcToggled();
-        mT3tIdentifiersCache.onSecureNfcToggled();
+    public void onTriggerRoutingTableUpdate() {
+        if (DBG) Log.d(TAG, "onTriggerRoutingTableUpdate");
+        mAidCache.onTriggerRoutingTableUpdate();
+        mT3tIdentifiersCache.onTriggerRoutingTableUpdate();
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
@@ -903,11 +914,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                                     .setPollingLoopFilter(pollingLoopFilter)
                                     .build())
                             .build());
-            if (Flags.exitFrames()
-                    && mAidCache.isDefaultOrAssociatedWalletPackage(service.getPackageName(),
-                    userId)) {
-                updateFirmwareExitFramesForWalletRole(userId);
-            }
             return true;
         }
 
@@ -943,11 +949,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                                     .setPollingLoopFilter(pollingLoopFilter)
                                     .build())
                             .build());
-            if (Flags.exitFrames()
-                    && mAidCache.isDefaultOrAssociatedWalletPackage(service.getPackageName(),
-                    userId)) {
-                updateFirmwareExitFramesForWalletRole(userId);
-            }
             return true;
         }
 
@@ -983,11 +984,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                                     .setPollingLoopFilter(pollingLoopPatternFilter)
                                     .build())
                             .build());
-            if (Flags.exitFrames()
-                    && mAidCache.isDefaultOrAssociatedWalletPackage(service.getPackageName(),
-                    userId)) {
-                updateFirmwareExitFramesForWalletRole(userId);
-            }
             return true;
         }
 
@@ -1023,11 +1019,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                                     .setPollingLoopFilter(pollingLoopPatternFilter)
                                     .build())
                             .build());
-            if (Flags.exitFrames()
-                    && mAidCache.isDefaultOrAssociatedWalletPackage(service.getPackageName(),
-                    userId)) {
-                updateFirmwareExitFramesForWalletRole(userId);
-            }
             return true;
         }
 
@@ -1152,7 +1143,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         @Override
         public int setServiceEnabledForCategoryOther(int userId,
                 ComponentName app, boolean status) throws RemoteException {
-            if (!mContext.getResources().getBoolean(R.bool.enable_service_for_category_other))
+            if (!mDeviceConfigFacade.getEnableServiceOther())
               return SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
             NfcPermissions.enforceUserPermissions(mContext);
 
@@ -1732,6 +1723,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             callNfcEventCallbacks(listener -> listener.onObserveModeDisabledInFirmware(exitFrame));
         }
         mHostEmulationManager.onObserveModeDisabledInFirmware(exitFrame);
+
+        if (mStatsdUtils != null) {
+            mStatsdUtils.logAutoTransactReported(StatsdUtils.PROCESSOR_NFCC, exitFrame.getData());
+        }
     }
 
     @Override
