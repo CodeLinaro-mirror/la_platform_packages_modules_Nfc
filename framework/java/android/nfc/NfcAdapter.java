@@ -272,6 +272,17 @@ public final class NfcAdapter {
      */
     public static final String EXTRA_PREFERRED_PAYMENT_CHANGED_REASON =
             "android.nfc.extra.PREFERRED_PAYMENT_CHANGED_REASON";
+
+    /**
+     * Key to specify an NFC-A polling loop annotation (as a byte array) in the extras Bundle when
+     * calling {@link #enableReaderMode(Activity, ReaderCallback, int, Bundle)}.
+     *
+     * This polling loop annotation will be included as a non-standard polling frame which will be
+     * reported to via {@link android.nfc.cardemulation.HostApduService#processPollingFrames(List)}
+     */
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_READER_MODE_ANNOTATIONS)
+    public static final String EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION =
+            "android.nfc.extra.READER_TECH_A_POLLING_LOOP_ANNOTATION";
     /**
      * Nfc is enabled and the preferred payment aids are registered.
      */
@@ -423,7 +434,8 @@ public final class NfcAdapter {
     /**
      * Flags for use with {@link #setDiscoveryTechnology(Activity, int, int)}.
      * <p>
-     * Setting this flag makes listening to keep the current technology configuration.
+     * Setting this flag makes listening to be set to the current stored default technology
+     * configuration.
      */
     @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
     public static final int FLAG_LISTEN_KEEP = 0x80000000;
@@ -431,7 +443,8 @@ public final class NfcAdapter {
     /**
      * Flags for use with {@link #setDiscoveryTechnology(Activity, int, int)}.
      * <p>
-     * Setting this flag makes polling to keep the current technology configuration.
+     * Setting this flag makes polling to be set to the current stored default technology
+     * configuration.
      */
     @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
     public static final int FLAG_READER_KEEP = 0x80000000;
@@ -623,6 +636,14 @@ public final class NfcAdapter {
      */
     public interface ReaderCallback {
         public void onTagDiscovered(Tag tag);
+    }
+
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public static IT4tNdefNfcee getNdefNfceeService() {
+        return sNdefNfceeService;
     }
 
     /**
@@ -923,7 +944,7 @@ public final class NfcAdapter {
         mNfcUnlockHandlers = new HashMap<NfcUnlockHandler, INfcUnlockHandler>();
         mTagRemovedListener = null;
         mLock = new Object();
-        mControllerAlwaysOnListener = new NfcControllerAlwaysOnListener(getService());
+        mControllerAlwaysOnListener = new NfcControllerAlwaysOnListener();
         mNfcWlcStateListener = new NfcWlcStateListener(getService());
         mNfcVendorNciCallbackListener = new NfcVendorNciCallbackListener();
         mNfcOemExtension = new NfcOemExtension(mContext, this);
@@ -1183,7 +1204,6 @@ public final class NfcAdapter {
      * respond to the reader and proceed with the transaction.
      * @return true if the mode is supported, false otherwise.
      */
-    @FlaggedApi(Flags.FLAG_NFC_OBSERVE_MODE)
     public boolean isObserveModeSupported() {
         return callServiceReturn(() ->  sService.isObserveModeSupported(), false);
     }
@@ -1194,7 +1214,6 @@ public final class NfcAdapter {
      * @return true if observe mode is enabled, false otherwise.
      */
 
-    @FlaggedApi(Flags.FLAG_NFC_OBSERVE_MODE)
     public boolean isObserveModeEnabled() {
         return callServiceReturn(() ->  sService.isObserveModeEnabled(), false);
     }
@@ -1215,7 +1234,6 @@ public final class NfcAdapter {
      * @return boolean indicating success or failure.
      */
 
-    @FlaggedApi(Flags.FLAG_NFC_OBSERVE_MODE)
     public boolean setObserveModeEnabled(boolean enabled) {
         if (mContext == null) {
             throw new UnsupportedOperationException("You need a context on NfcAdapter to use the "
@@ -1807,23 +1825,9 @@ public final class NfcAdapter {
     public void setDiscoveryTechnology(@NonNull Activity activity,
             @PollTechnology int pollTechnology, @ListenTechnology int listenTechnology) {
 
-        if (listenTechnology == FLAG_LISTEN_DISABLE) {
-            synchronized (sLock) {
-                if (!sHasNfcFeature) {
-                    throw new UnsupportedOperationException();
-                }
-            }
-        } else if (pollTechnology == FLAG_READER_DISABLE) {
-            synchronized (sLock) {
-                if (!sHasCeFeature) {
-                    throw new UnsupportedOperationException();
-                }
-            }
-        } else {
-            synchronized (sLock) {
-                if (!sHasNfcFeature || !sHasCeFeature) {
-                    throw new UnsupportedOperationException();
-                }
+        synchronized (sLock) {
+            if (!sHasNfcFeature && !sHasCeFeature) {
+                throw new UnsupportedOperationException();
             }
         }
     /*
@@ -2557,7 +2561,6 @@ public final class NfcAdapter {
      * @hide
      */
     @TestApi
-    @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyPollingLoop(@NonNull PollingFrame pollingFrame) {
         callService(() ->  sService.notifyPollingLoop(pollingFrame));
     }
@@ -2568,7 +2571,6 @@ public final class NfcAdapter {
      *
      * @hide
      */
-    @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyTestHceData(int technology, byte[] data) {
         callService(() ->  sService.notifyTestHceData(technology, data));
     }
@@ -2594,11 +2596,11 @@ public final class NfcAdapter {
         }
     }
     /** @hide */
-    interface ServiceCallReturn<T> {
+    public interface ServiceCallReturn<T> {
         T call() throws RemoteException;
     }
     /** @hide */
-    static <T> T callServiceReturn(ServiceCallReturn<T> call, T defaultReturn) {
+    public static <T> T callServiceReturn(ServiceCallReturn<T> call, T defaultReturn) {
         try {
             if (sService == null) {
                 attemptDeadServiceRecovery(new RemoteException("NFC Service is null"));
@@ -2622,7 +2624,6 @@ public final class NfcAdapter {
      * @hide
      */
     @TestApi
-    @FlaggedApi(Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void notifyHceDeactivated() {
         callService(() ->  sService.notifyHceDeactivated());
     }
