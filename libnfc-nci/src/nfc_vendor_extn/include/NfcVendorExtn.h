@@ -75,9 +75,11 @@ typedef struct {
 /**
  * @brief Holds functional event codes to support
  *        extension features.
+ * Begin with 0x0B to avoid conflicts with standard and vendor specific HAL
+ * events
  */
 typedef enum {
-  HANDLE_VENDOR_NCI_MSG,
+  HANDLE_VENDOR_NCI_MSG = 0x0B,
   HANDLE_VENDOR_NCI_RSP_NTF,
   HANDLE_WRITE_COMPLETE_STATUS,
   HANDLE_HAL_CONTROL_GRANTED,
@@ -86,6 +88,12 @@ typedef enum {
   HANDLE_HAL_EVENT,
   HANDLE_FW_DNLD_STATUS_UPDATE,
   HANDLE_DOWNLOAD_FIRMWARE_REQUEST,
+  HANDLE_NFC_ADAPTATION_INIT,
+  HANDLE_NFC_PRE_DISCOVER,
+  HANDLE_NFC_HAL_CORE_INITIALIZE,
+  HANDLE_NFC_HAL_POWER_CYCLE,
+  HANDLE_NFC_GET_MAX_NFCEE,
+  HANDLE_NFC_HAL_CLOSE,
 } NfcExtEvent_t;
 
 typedef enum {

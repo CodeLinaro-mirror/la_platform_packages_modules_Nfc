@@ -29,6 +29,7 @@ import androidx.test.uiautomator.UiObjectNotFoundException;
 import androidx.test.uiautomator.UiScrollable;
 import androidx.test.uiautomator.UiSelector;
 
+import com.android.compatibility.common.util.CommonTestUtils;
 import com.android.nfc.service.AccessServiceTurnObserveModeOnProcessApdu;
 import com.android.nfc.utils.CommandApdu;
 import com.android.nfc.utils.HceUtils;
@@ -54,13 +55,16 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
      * @param serviceClassNames - service class names to enable
      * @param testPassClassName - class name of service that should handle the APDUs
      * @param isPaymentActivity - whether or not it is a payment activity
+     * @param shouldDisableServicesOnDestroy - whether or not to disable services on destroy
      */
     @Rpc(description = "Start simple emulator activity")
     public void startSimpleEmulatorActivity(
-            String[] serviceClassNames, String testPassClassName, boolean isPaymentActivity) {
+            String[] serviceClassNames, String testPassClassName,
+            boolean isPaymentActivity, boolean shouldDisableServicesOnDestroy) {
         Intent intent =
                 buildSimpleEmulatorActivityIntent(
-                        serviceClassNames, testPassClassName, null, isPaymentActivity);
+                        serviceClassNames, testPassClassName, null, isPaymentActivity,
+                        shouldDisableServicesOnDestroy);
         mActivity =
                 (SimpleEmulatorActivity)
                         InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -85,7 +89,8 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
                         serviceClassNames,
                         testPassClassName,
                         preferredServiceClassName,
-                        isPaymentActivity);
+                        isPaymentActivity,
+                        true);
         mActivity =
                 (SimpleEmulatorActivity)
                         InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
@@ -408,6 +413,23 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity = (EventListenerEmulatorActivity) instrumentation.startActivitySync(intent);
     }
 
+    @Rpc(description = "Opens the Exit Frame Activity")
+    public void startExitFrameActivity(String intendedExitFrame, String[] plpfs,
+            boolean waitForTransaction) {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClassName(instrumentation.getTargetContext(),
+                ExitFrameEmulatorActivity.class.getName());
+        intent.putExtra(ExitFrameEmulatorActivity.EXIT_FRAME_KEY, intendedExitFrame);
+        intent.putStringArrayListExtra(ExitFrameEmulatorActivity.REGISTER_PATTERNS_KEY,
+                new ArrayList<>(Arrays.asList(plpfs)));
+        intent.putExtra(ExitFrameEmulatorActivity.WAIT_FOR_TRANSACTION_KEY, waitForTransaction);
+
+        mActivity = (ExitFrameEmulatorActivity) instrumentation.startActivitySync(intent);
+    }
+
     /** Registers receiver that waits for RF field broadcast */
     @AsyncRpc(description = "Waits for RF field detected broadcast")
     public void asyncWaitForRfOnBroadcast(String callbackId, String eventName) {
@@ -542,6 +564,14 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
     public void closeActivity() {
         if (mActivity != null) {
             mActivity.finish();
+            try {
+                CommonTestUtils.waitUntil(
+                        "Activity didn't finish in 5 seconds",
+                        5,
+                        () -> mActivity.isDestroyed()
+                );
+            } catch (InterruptedException | AssertionError e) {
+            }
         }
     }
 
@@ -590,8 +620,8 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
             String[] serviceClassNames,
             String expectedServiceClassName,
             String preferredServiceClassName,
-            boolean isPaymentActivity) {
-
+            boolean isPaymentActivity,
+            boolean shouldDisableServicesOnDestroy) {
         Intent intent = new Intent(Intent.ACTION_MAIN);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.setClassName(
@@ -619,7 +649,9 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         }
 
         intent.putExtra(SimpleEmulatorActivity.EXTRA_IS_PAYMENT_ACTIVITY, isPaymentActivity);
-
+        intent.putExtra(
+                SimpleEmulatorActivity.EXTRA_SHOULD_DISABLE_SERVICES_ON_DESTROY,
+                shouldDisableServicesOnDestroy);
         return intent;
     }
 }

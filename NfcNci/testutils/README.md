@@ -42,16 +42,21 @@ python3 nfcreplay.py -f $SNOOP_FILE -p $READER_PATH --generate_and_replay_test
 A Python file will be created, representing the test, along with a JSON file
 that contains all information pertaining to APDUs transacted.
 
-### Using the Emulator App
+#### Using the Emulator App
 
-The emulator app (located at src/com/android/nfc/emulatorapp/) is meant to
-handle APDU transactions between the PN 532 reader and the Android emulator in
-cases where the replayed transaction involves a third party app that the
-emulator does not access to. To guarantee that the emulator app is able to
-handle the transaction, all AIDs sent in the original transaction will be
-replaced with AIDs that the app is registered to handle (the specific values
-are located in @xml/aids). To use the app in conjunction with the replay tool,
-enter the following commands.
+The generated test will always involve the installation of the emulator app
+(located at src/com/android/nfc/emulatorapp/) onto the emulator. The app handles
+APDU transactions in cases where the replayed transaction involves a third party
+app that the emulator does not access to. To guarantee that the emulator app is
+able to handle the transaction, all AIDs sent in the original transaction will
+be replaced with AIDs that the app is registered to handle (the specific values
+are located in @xml/aids).
+
+When the transaction is replayed, you should be able to see a list of APDU
+commands and responses received and sent by the Host APDU service displayed on
+the emulator app.
+
+To use the emulator app outside of a generated test, perform the following steps:
 
 1\. To prepare a snoop log to be replayed with the app:
 
@@ -67,8 +72,8 @@ the Pixel 6 Pro (Raven). Non-Raven devices should substitute "raven" for the
 appropriate value.
 
 ```
-mma emulatorapp
-adb install -r -g ~/aosp-main-with-phones/out/target/product/raven/system/app/emulatorapp/emulatorapp.apk
+mma NfcEmulatorApduAppNonTest
+adb install -r -g ~/aosp-main-with-phones/out/target/product/raven/system/app/emulatorapp/NfcEmulatorApduAppNonTest.apk
 
 ```
 

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="app_name" msgid="5975754765946896125">"NFC pakalpojums"</string>
-    <string name="nfcUserLabel" msgid="1264167300457896256">"NFC"</string>
+    <!-- no translation found for app_name (6065635506543927196) -->
+    <skip />
+    <!-- no translation found for nfcUserLabel (8399413714687124782) -->
+    <skip />
     <string name="accessibility_nfc_enabled" msgid="830589378553181410">"NFC ir iespējoti."</string>
     <string name="tap_to_beam" msgid="2022424274840394451">"Pieskarties, lai kopīgotu, izmantojot funkciju Beam"</string>
     <string name="beam_progress" msgid="1929294166633309327">"Ienākošie vienumi, izmantojot funkciju Beam..."</string>
@@ -35,7 +37,7 @@
     <string name="could_not_use_app" msgid="2945389413330489607">"Nevarēja izmantot lietotni <xliff:g id="APP">%1$s</xliff:g>."</string>
     <string name="pay_with" msgid="5104112137995621262">"Maksāt, izmantojot:"</string>
     <string name="complete_with" msgid="6624789011610610450">"Pabeigt, izmantojot:"</string>
-    <string name="default_pay_app_removed" msgid="4678760785647557185">"Pakalpojums, kuru pēc noklusējuma izmantojāt funkcijai “Pieskarties un maksāt”, tika noņemts. Vai izvēlēties citu pakalpojumu?"</string>
+    <string name="default_pay_app_removed" msgid="4678760785647557185">"Pakalpojums, kuru pēc noklusējuma izmantojāt funkcijai “Bezkontakta maksājums”, tika noņemts. Vai izvēlēties citu pakalpojumu?"</string>
     <string name="ask_nfc_tap" msgid="7921925213499063051">"Pieskarieties citai ierīcei, lai pabeigtu"</string>
     <string name="wifi_connect" msgid="2726973850576310336">"Izveidot savienojumu"</string>
     <string name="status_unable_to_connect" msgid="3282224066213036023">"Nevar izveidot savienojumu ar tīklu."</string>

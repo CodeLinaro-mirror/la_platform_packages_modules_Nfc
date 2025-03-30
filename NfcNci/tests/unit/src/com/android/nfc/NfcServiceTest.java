@@ -30,6 +30,7 @@ import static com.android.nfc.NfcService.SOUND_ERROR;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
@@ -253,7 +254,7 @@ public final class NfcServiceTest {
         when(mApplication.getSystemService(KeyguardManager.class)).thenReturn(mKeyguardManager);
         when(mApplication.getSystemService(AlarmManager.class)).thenReturn(mAlarmManager);
         when(mApplication.getPackageManager()).thenReturn(mPackageManager);
-        when(mResources.getBoolean(R.bool.check_display_state_for_screen_state)).thenReturn(true);
+        when(mDeviceConfigFacade.getCheckDisplayStateForScreenState()).thenReturn(true);
         when(mApplication.getResources()).thenReturn(mResources);
         when(mApplication.createContextAsUser(any(), anyInt())).thenReturn(mApplication);
         when(mApplication.getContentResolver()).thenReturn(mContentResolver);
@@ -263,7 +264,7 @@ public final class NfcServiceTest {
         when(mUserManager.getUserRestrictions()).thenReturn(mUserRestrictions);
         when(mResources.getStringArray(R.array.nfc_allow_list)).thenReturn(new String[0]);
         when(mResources.getBoolean(R.bool.tag_intent_app_pref_supported)).thenReturn(true);
-        when(mResources.getBoolean(R.bool.nfcc_always_on_allowed)).thenReturn(true);
+        when(mDeviceConfigFacade.getNfccAlwaysOnAllowed()).thenReturn(true);
         when(mPreferences.edit()).thenReturn(mPreferencesEditor);
         when(mPowerManager.newWakeLock(anyInt(), anyString()))
                 .thenReturn(mock(PowerManager.WakeLock.class));
@@ -343,7 +344,7 @@ public final class NfcServiceTest {
 
     @Test
     public void testEnable_WheOemExtensionEnabledAndNotInitialized() throws Exception {
-        when(mResources.getBoolean(R.bool.enable_oem_extension)).thenReturn(true);
+        when(mDeviceConfigFacade.getEnableOemExtension()).thenReturn(true);
         when(NfcProperties.initialized()).thenReturn(Optional.of(Boolean.FALSE));
 
         createNfcService();
@@ -370,7 +371,7 @@ public final class NfcServiceTest {
 
     @Test
     public void testBootupWithNfcOn_WhenOemExtensionEnabled() throws Exception {
-        when(mResources.getBoolean(R.bool.enable_oem_extension)).thenReturn(true);
+        when(mDeviceConfigFacade.getEnableOemExtension()).thenReturn(true);
         createNfcService();
 
         verifyNoMoreInteractions(mDeviceHost);
@@ -1374,7 +1375,7 @@ public final class NfcServiceTest {
 
     @Test
     public void testOnSeSelected() {
-        mNfcService.onSeSelected();
+        mNfcService.onSeSelected(NfcService.SE_SELECTED_AID);
         mLooper.dispatchAll();
         verify(mCardEmulationManager).onOffHostAidSelected();
     }
@@ -2067,7 +2068,7 @@ public final class NfcServiceTest {
         verify(mBackupManager).dataChanged();
         verify(mDeviceHost).setNfcSecure(true);
         verify(mNfcEventLog, times(2)).logEvent(any());
-        verify(mCardEmulationManager).onSecureNfcToggled();
+        verify(mCardEmulationManager).onTriggerRoutingTableUpdate();
     }
 
     @Test
@@ -2243,12 +2244,15 @@ public final class NfcServiceTest {
 
     @Test
     public void testSetFirmwareExitFrameTable() {
+        createNfcServiceWithoutStatsdUtils();
         ArgumentCaptor<ExitFrame[]> frameCaptor = ArgumentCaptor.forClass(ExitFrame[].class);
         ArgumentCaptor<byte[]> timeoutCaptor = ArgumentCaptor.forClass(byte[].class);
+        when(mDeviceHost.setFirmwareExitFrameTable(any(), any())).thenReturn(true);
 
-        mNfcService.setFirmwareExitFrameTable(Collections.singletonList(new ExitFrame("1234")),
-                5000);
+        boolean result = mNfcService.setFirmwareExitFrameTable(
+            Collections.singletonList(new ExitFrame("1234")), 5000);
 
+        assertTrue("setFirmwareExitFrameTable should return true", result);
         verify(mDeviceHost).setFirmwareExitFrameTable(frameCaptor.capture(),
                 timeoutCaptor.capture());
         ExitFrame[] frames = frameCaptor.getValue();
@@ -2257,18 +2261,22 @@ public final class NfcServiceTest {
         byte[] timeoutBytes = timeoutCaptor.getValue();
         // 5000 in little-endian bytes
         assertArrayEquals(new byte[] {(byte) 0x88, 0x13}, timeoutBytes);
+        verify(mStatsdUtils).logExitFrameTableChanged(1, 5000);
     }
-
 
     @Test
     public void testSetFirmwareExitFrameTable_largeTimeout() {
+        createNfcServiceWithoutStatsdUtils();
         ArgumentCaptor<byte[]> timeoutCaptor = ArgumentCaptor.forClass(byte[].class);
+        when(mDeviceHost.setFirmwareExitFrameTable(any(), any())).thenReturn(true);
 
-        mNfcService.setFirmwareExitFrameTable(Collections.singletonList(new ExitFrame("1234")),
-                500000);
+        boolean result = mNfcService.setFirmwareExitFrameTable(
+            Collections.singletonList(new ExitFrame("1234")), 500000);
 
+        assertTrue("setFirmwareExitFrameTable should return true", result);
         verify(mDeviceHost).setFirmwareExitFrameTable(any(), timeoutCaptor.capture());
         byte[] timeoutBytes = timeoutCaptor.getValue();
         assertArrayEquals(new byte[] {(byte) 0xFF, (byte) 0xFF}, timeoutBytes);
+        verify(mStatsdUtils).logExitFrameTableChanged(1, 500000);
     }
 }

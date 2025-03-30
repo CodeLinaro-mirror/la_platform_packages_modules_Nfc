@@ -571,6 +571,9 @@ void NfcAdaptation::GetVendorConfigs(
 *******************************************************************************/
 void NfcAdaptation::Initialize() {
   const char* func = "NfcAdaptation::Initialize";
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_ADAPTATION_INIT, HAL_NFC_STATUS_OK);
+  }
   // Init log tag
   android::base::InitLogging(nullptr);
   android::base::SetDefaultTag("libnfc_nci");
@@ -708,6 +711,7 @@ void NfcAdaptation::Finalize() {
     }
     AIBinder_unlinkToDeath(mAidlHal->asBinder().get(), mDeathRecipient.get(),
                            nullptr);
+    mAidlHal = nullptr;
   } else if (mHal != nullptr) {
     if (sVndExtnsPresent) {
       sNfcVendorExtn->finalize();
@@ -949,10 +953,11 @@ void NfcAdaptation::HalOpenInternal(tHAL_NFC_CBACK* p_hal_cback,
         p_hal_cback, p_data_cback);
     Status status = mAidlHal->open(mAidlCallback);
     if (!status.isOk()) {
-      LOG(ERROR) << "Open Error: "
-                 << ::aidl::android::hardware::nfc::toString(
-                        static_cast<NfcAidlStatus>(
-                            status.getServiceSpecificError()));
+      LOG(ERROR) << StringPrintf(
+          "%s: Open Error=%s", __func__,
+          ::aidl::android::hardware::nfc::toString(
+              static_cast<NfcAidlStatus>(status.getServiceSpecificError()))
+              .c_str());
     } else {
       bool verbose_vendor_log =
           android::base::GetBoolProperty(VERBOSE_VENDOR_LOG_PROPERTY, false);
@@ -1000,6 +1005,9 @@ void NfcAdaptation::HalOpen(tHAL_NFC_CBACK* p_hal_cback,
 void NfcAdaptation::HalClose() {
   const char* func = "NfcAdaptation::HalClose";
   LOG(VERBOSE) << StringPrintf("%s", func);
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_HAL_CLOSE, HAL_NFC_STATUS_OK);
+  }
   if (mAidlHal != nullptr) {
     mAidlHal->close(NfcCloseType::DISABLE);
   } else if (mHal != nullptr) {
@@ -1051,6 +1059,10 @@ void NfcAdaptation::HalCoreInitialized(uint16_t data_len,
                                        uint8_t* p_core_init_rsp_params) {
   const char* func = "NfcAdaptation::HalCoreInitialized";
   LOG(VERBOSE) << StringPrintf("%s", func);
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_HAL_CORE_INITIALIZE,
+                                 HAL_NFC_STATUS_OK);
+  }
   if (mAidlHal != nullptr) {
     // AIDL coreInitialized doesn't send data to HAL.
     mAidlHal->coreInitialized();
@@ -1078,10 +1090,14 @@ void NfcAdaptation::HalCoreInitialized(uint16_t data_len,
 bool NfcAdaptation::HalPrediscover() {
   const char* func = "NfcAdaptation::HalPrediscover";
   LOG(VERBOSE) << StringPrintf("%s", func);
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_PRE_DISCOVER, HAL_NFC_STATUS_OK);
+  }
   if (mAidlHal != nullptr) {
     Status status = mAidlHal->preDiscover();
     if (status.isOk()) {
-      LOG(VERBOSE) << StringPrintf("%s wait for NFC_PRE_DISCOVER_CPLT_EVT", func);
+      LOG(VERBOSE) << StringPrintf("%s: wait for NFC_PRE_DISCOVER_CPLT_EVT",
+                                   func);
       return true;
     }
   } else if (mHal != nullptr) {
@@ -1112,7 +1128,7 @@ void NfcAdaptation::HalControlGranted() {
       NfcAidlStatus aidl_status;
       mAidlHal->controlGranted(&aidl_status);
     } else {
-      LOG(ERROR) << StringPrintf("Unsupported function %s", func);
+      LOG(ERROR) << StringPrintf("%s: Unsupported function", func);
     }
   } else if (mHal != nullptr) {
     mHal->controlGranted();
@@ -1131,6 +1147,9 @@ void NfcAdaptation::HalControlGranted() {
 void NfcAdaptation::HalPowerCycle() {
   const char* func = "NfcAdaptation::HalPowerCycle";
   LOG(VERBOSE) << StringPrintf("%s", func);
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_HAL_POWER_CYCLE, HAL_NFC_STATUS_OK);
+  }
   if (mAidlHal != nullptr) {
     mAidlHal->powerCycle();
   } else if (mHal != nullptr) {
@@ -1150,7 +1169,9 @@ void NfcAdaptation::HalPowerCycle() {
 uint8_t NfcAdaptation::HalGetMaxNfcee() {
   const char* func = "NfcAdaptation::HalGetMaxNfcee";
   LOG(VERBOSE) << StringPrintf("%s", func);
-
+  if (sVndExtnsPresent) {
+    sNfcVendorExtn->processEvent(HANDLE_NFC_GET_MAX_NFCEE, HAL_NFC_STATUS_OK);
+  }
   return nfa_ee_max_ee_cfg;
 }
 
@@ -1169,7 +1190,8 @@ bool NfcAdaptation::DownloadFirmware() {
   LOG(VERBOSE) << StringPrintf("%s: enter", func);
   HalInitialize();
   if (sVndExtnsPresent) {
-    sNfcVendorExtn->processEvent(HANDLE_DOWNLOAD_FIRMWARE_REQUEST, 0x00);
+    sNfcVendorExtn->processEvent(HANDLE_DOWNLOAD_FIRMWARE_REQUEST,
+                                 HAL_NFC_STATUS_OK);
   }
   mHalOpenCompletedEvent.lock();
   LOG(VERBOSE) << StringPrintf("%s: try open HAL", func);

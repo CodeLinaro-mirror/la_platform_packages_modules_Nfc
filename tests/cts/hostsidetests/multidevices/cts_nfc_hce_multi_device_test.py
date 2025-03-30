@@ -36,6 +36,7 @@ import json
 import logging
 import ssl
 import sys
+import time
 
 from android.platform.test.annotations import CddTest
 from android.platform.test.annotations import ApiTest
@@ -126,12 +127,10 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
 
     def _set_up_emulator(self, *args, start_emulator_fun=None, service_list=[],
                  expected_service=None, is_payment=False, preferred_service=None,
-                 payment_default_service=None):
+                 payment_default_service=None, should_disable_services_on_destroy=True):
         """
         Sets up emulator device for multidevice tests.
-        :param is_payment: bool
-            Whether test is setting up payment services. If so, this function will register
-            this app as the default wallet.
+        :param args: arguments for start_emulator_fun, if any
         :param start_emulator_fun: fun
             Custom function to start the emulator activity. If not present,
             startSimpleEmulatorActivity will be used.
@@ -139,11 +138,15 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             List of services to set up. Only used if a custom function is not called.
         :param expected_service: String
             Class name of the service expected to handle the APDUs.
+        :param is_payment: bool
+            Whether test is setting up payment services. If so, this function will register
+            this app as the default wallet.
         :param preferred_service: String
             Service to set as preferred service, if any.
         :param payment_default_service: String
             For payment tests only: the default payment service that is expected to handle APDUs.
-        :param args: arguments for start_emulator_fun, if any
+        :param should_disable_services_on_destroy: bool
+            Whether to disable services on destroy (set to False for reboot tests).
 
         :return:
         """
@@ -153,12 +156,12 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             start_emulator_fun(*args)
         else:
             if preferred_service is None:
-                self.emulator.nfc_emulator.startSimpleEmulatorActivity(service_list,
-                                                                       expected_service, is_payment)
+                self.emulator.nfc_emulator.startSimpleEmulatorActivity(
+                        service_list, expected_service, is_payment,
+                        should_disable_services_on_destroy)
             else:
                 self.emulator.nfc_emulator.startSimpleEmulatorActivityWithPreferredService(
-                    service_list, expected_service, preferred_service, is_payment
-                )
+                        service_list, expected_service, preferred_service, is_payment)
 
         if is_payment:
             role_held_handler.waitAndGet('RoleHeld', _NFC_TIMEOUT_SEC)
@@ -183,6 +186,11 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
     def _is_cuttlefish_device(self, ad: android_device.AndroidDevice) -> bool:
         product_name = ad.adb.getprop("ro.product.name")
         return "cf_x86" in product_name
+
+    def _reboot(self, ad: android_device.AndroidDevice):
+        ad.reboot()
+        ad.nfc_emulator.turnScreenOn()
+        ad.nfc_emulator.pressMenu()
 
     def _get_casimir_id_for_device(self):
         host = "localhost"
@@ -227,10 +235,6 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
                 'nfc_emulator', 'com.android.nfc.emulator'
             )
             self.emulator.debug_tag = 'emulator'
-            if not self.emulator.nfc_emulator.isNfcHceSupported():
-                self._setup_failure_reason = f'NFC HCE is not supported on {self.emulator}'
-                self._setup_failure_should_block_tests = False
-                return
             try:
                 self.emulator.adb.shell(['svc', 'nfc', 'enable'])
             except adb.AdbError:
@@ -339,6 +343,45 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         self._set_up_reader_and_assert_transaction(expected_service=_PAYMENT_SERVICE_1)
 
     @CddTest(requirements = ["7.4.4/C-2-2", "7.4.4/C-1-2", "9.1/C-0-1"])
+    def test_single_payment_service_after_reboot(self):
+        """Tests successful APDU exchange between payment service and
+        reader after a reboot.
+
+        Test Steps:
+        1. Set callback handler on emulator for when the instrumentation app is
+        set to default wallet app.
+        2. Reboot the emulator device.
+        3. Start emulator activity and wait for the app to hold the wallet role.
+        4. Start PN532 reader, which should trigger APDU exchange between
+        reader and emulator.
+
+        Verifies:
+        1. Verifies emulator device sets the instrumentation emulator app to the
+        default wallet app.
+        2. Verifies a successful APDU exchange after reboot.
+        """
+        # Set the role before rebooting and ensure it remains enabled after
+        # reboot to ensure that the NFC stack binds to it at bootup.
+        self._set_up_emulator(
+            service_list=[_PAYMENT_SERVICE_1],
+            expected_service=_PAYMENT_SERVICE_1,
+            is_payment=True, # Set the role holder before reboot.
+            payment_default_service=_PAYMENT_SERVICE_1,
+            should_disable_services_on_destroy=False # Don't disable services on shutdown.
+        )
+        self._reboot(self.emulator)
+        # Setup the payment service activity to handle the transaction after
+        # reboot.
+        self._set_up_emulator(
+            service_list=[_PAYMENT_SERVICE_1],
+            expected_service=_PAYMENT_SERVICE_1,
+            is_payment=False, # Don't set the role to ensure that state is persisted across reboot.
+            payment_default_service=_PAYMENT_SERVICE_1
+        )
+        self._set_up_reader_and_assert_transaction(expected_service=_PAYMENT_SERVICE_1)
+
+
+    @CddTest(requirements = ["7.4.4/C-2-2", "7.4.4/C-1-2", "9.1/C-0-1"])
     def test_single_payment_service_with_background_app(self):
         """Tests successful APDU exchange between payment service and
         reader.
@@ -393,7 +436,11 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         ps = (self.emulator.adb.shell(["ps", "|", "grep", "com.android.nfc.emulator.payment"])
               .decode("utf-8"))
         pid = ps.split()[1]
-        self.emulator.adb.shell(["kill", "-9", pid])
+        try:
+            self.emulator.adb.shell(["kill", "-9", pid])
+        except adb.AdbError:
+            _LOG.info(f"Could not kill pid {pid} through adb.")
+            self.emulator.nfc_emulator.killProcess(pid)
 
         self._set_up_reader_and_assert_transaction(expected_service=_PAYMENT_SERVICE_1)
 
@@ -1153,6 +1200,7 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
 
         _LOG.debug(f"Polling frame gain results {results_for_power_level}")
 
+        issues = []
         for power_level in power_levels:
             # No value to compare to
             if power_level == 0:
@@ -1161,16 +1209,27 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             for type_ in polling_frame_types:
                 previous_gain = results_for_power_level[power_level - 1][type_]
                 current_gain = results_for_power_level[power_level][type_]
-                asserts.assert_greater_equal(
-                    current_gain, previous_gain,
-                    _FAILED_VENDOR_GAIN_VALUE_DROPPED_ON_POWER_INCREASE,
-                    {
-                        "type": type_,
-                        "power_level": power_level * 20,
-                        "previous_gain": previous_gain,
-                        "current_gain": current_gain,
-                    }
+                if current_gain >= previous_gain:
+                    continue
+                sample = {
+                    "type": type_,
+                    "power_level": power_level * 20,
+                    "previous_gain": previous_gain,
+                    "current_gain": current_gain,
+                }
+                _LOG.warning(
+                    f"Reported gain level dropped" + \
+                    f" between power steps {sample}"
                 )
+                issues.append(sample)
+
+        # Allow up to 2 reported gain decreases out of (5 * 3) = 15 test samples
+        # Theoretically, this could happen
+        # due to automatic power/gain/load management feature of chipsets
+        asserts.assert_true(
+            len(issues) <= 2,
+            _FAILED_VENDOR_GAIN_VALUE_DROPPED_ON_POWER_INCREASE,
+        )
 
     @CddTest(requirements = ["7.4.4/C-1-13"])
     def test_polling_frame_type(self):
@@ -1288,13 +1347,15 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             self.emulator.nfc_emulator.closeActivity()
             self.emulator.nfc_emulator.logInfo(
                 "*** TEST END: " + self.current_test_info.name + " ***")
-        self.pn532.reset_buffers()
-        self.pn532.mute()
-        param_list = [[self.emulator]]
-        utils.concurrent_exec(lambda d: d.services.create_output_excerpts_all(
-            self.current_test_info),
-                              param_list=param_list,
-                              raise_on_exception=True)
+        if hasattr(self, 'pn532'):
+            self.pn532.reset_buffers()
+            self.pn532.mute()
+        if hasattr(self, 'emulator'):
+            param_list = [[self.emulator]]
+            utils.concurrent_exec(lambda d: d.services.create_output_excerpts_all(
+                self.current_test_info),
+                                  param_list=param_list,
+                                  raise_on_exception=True)
 
     #@CddTest(requirements = {"7.4.4/C-2-2", "7.4.4/C-1-2"})
     def test_single_non_payment_service_with_listen_tech_disabled(self):
