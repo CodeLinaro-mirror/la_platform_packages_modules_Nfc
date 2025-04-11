@@ -193,7 +193,8 @@ enum {
   NFC_NFCC_POWER_OFF_REVT,          /* 17 NFCC turned off               */
   NFC_SET_POWER_SUB_STATE_REVT,     /* 18 Set power sub state response  */
   NFC_NFCEE_PL_CONTROL_REVT,        /* NFCEE Power/Link Ctrl response*/
-  NFC_NFCEE_STATUS_REVT             /* NFCEE Status Notification     */
+  NFC_NFCEE_STATUS_REVT,             /* NFCEE Status Notification     */
+  NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT  /* TZ secure zone event to switch OFF NFC */
                                     /* First vendor-specific rsp event  */
 };
 typedef uint16_t tNFC_RESPONSE_EVT;
