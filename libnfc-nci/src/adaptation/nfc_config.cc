@@ -36,7 +36,7 @@ static std::mutex config_mutex;
 namespace {
 std::string searchConfigPath(std::string file_name) {
   const std::vector<std::string> search_path = {
-      "/product/etc/", "/odm/etc/", "/vendor/etc/", "/system_ext/etc/", "/etc/",
+      "/vendor/etc/", "/odm/etc/", "/product/etc/", "/system_ext/etc/", "/etc/",
       "/apex/com.android.nfcservices/etc/"
   };
   for (std::string path : search_path) {

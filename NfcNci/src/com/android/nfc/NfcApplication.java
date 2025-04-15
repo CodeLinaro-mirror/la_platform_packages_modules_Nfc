@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/*******************************************************************************
+ *Changes from Qualcomm Technologies, Inc. are provided under the following license:
+ *Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ *SPDX-License-Identifier: BSD-3-Clause-Clear
+ ************************************************************/
+
 package com.android.nfc;
 
 import android.app.ActivityManager;
@@ -27,6 +33,7 @@ import android.os.UserHandle;
 
 import java.util.Iterator;
 import java.util.List;
+import java.io.File;
 
 public class NfcApplication extends Application {
 
@@ -61,8 +68,12 @@ public class NfcApplication extends Application {
                 break;
             }
         }
+        // Enabling the NFC client service when device node is presence
+        File file = new File("/dev/nq-nci");
+        if (file.exists()) {
         if (UserHandle.myUserId() == 0 && isMainProcess) {
             mNfcService = new NfcService(this, new NfcInjector(this, Looper.myLooper()));
         }
+	}
     }
 }
