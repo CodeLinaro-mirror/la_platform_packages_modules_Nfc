@@ -107,7 +107,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         RegisteredNfcFServicesCache.Callback, PreferredServices.Callback,
         EnabledNfcFServices.Callback, WalletRoleObserver.Callback,
         PreferredSubscriptionService.Callback,
-        HostEmulationManager.NfcAidRoutingListener {
+        HostEmulationManagerBase.NfcAidRoutingListener {
     static final String TAG = "CardEmulationManager";
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
 
@@ -133,7 +133,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     final RegisteredT3tIdentifiersCache mT3tIdentifiersCache;
     final RegisteredServicesCache mServiceCache;
     final RegisteredNfcFServicesCache mNfcFServicesCache;
-    final HostEmulationManager mHostEmulationManager;
+    final HostEmulationManagerBase mHostEmulationManager;
     final HostNfcFEmulationManager mHostNfcFEmulationManager;
     final PreferredServices mPreferredServices;
 
@@ -159,11 +159,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Nullable
     private final StatsdUtils mStatsdUtils;
     private final DeviceConfigFacade mDeviceConfigFacade;
+    private final NfcInjector mNfcInjector;
 
     // TODO: Move this object instantiation and dependencies to NfcInjector.
     public CardEmulationManager(Context context, NfcInjector nfcInjector,
         DeviceConfigFacade deviceConfigFacade) {
         mContext = context;
+        mNfcInjector = nfcInjector;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
         mForegroundUtils = ForegroundUtils.getInstance(
@@ -217,8 +219,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcEventLog nfcEventLog,
             PreferredSubscriptionService preferredSubscriptionService,
             StatsdUtils statsdUtils,
-            DeviceConfigFacade deviceConfigFacade) {
+            DeviceConfigFacade deviceConfigFacade,
+            NfcInjector nfcInjector) {
         mContext = context;
+        mNfcInjector = nfcInjector;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
         mForegroundUtils = foregroundUtils;
@@ -362,6 +366,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     public void onBootCompleted() {
         mHostEmulationManager.onBootCompleted();
+        mServiceCache.onBootCompleted();
     }
 
     public void onUserSwitched(int userId) {
@@ -1179,7 +1184,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             int callingUid = Binder.getCallingUid();
             if (android.nfc.Flags.nfcOverrideRecoverRoutingTable()) {
                 if (!isPreferredServicePackageNameForUser(pkg,
-                        UserHandle.getUserHandleForUid(callingUid).getIdentifier())) {
+                        UserHandle.getUserHandleForUid(callingUid).getIdentifier())
+                        && !mNfcInjector.isSignedWithPlatformKey(callingUid)) {
                     Log.e(TAG, "overrideRoutingTable: Caller not preferred NFC service.");
                     throw new SecurityException("Caller not preferred NFC service");
                 }
