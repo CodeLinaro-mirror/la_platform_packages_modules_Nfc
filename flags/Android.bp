@@ -24,6 +24,10 @@ aconfig_declarations {
     package: "com.android.nfc.module.flags",
     container: "com.android.nfcservices",
     srcs: ["*.aconfig"],
+    visibility: [
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 java_aconfig_library {
@@ -36,6 +40,7 @@ java_aconfig_library {
     ],
     visibility: [
         "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
     ],
 }
 
