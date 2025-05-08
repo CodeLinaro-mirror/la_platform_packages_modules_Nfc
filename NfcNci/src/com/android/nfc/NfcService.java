@@ -4499,7 +4499,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             Log.d(TAG, "applyRouting");
         }
         synchronized (this) {
-            if (!isNfcEnabledOrShuttingDown()) {
+            if (isNfcDisabledOrDisabling()) {
                 return;
             }
             if (mNfcOemExtensionCallback != null
@@ -4789,6 +4789,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             // Clear the Handler queue, only last commit_msg is relevant
             mHandler.removeMessages(MSG_COMMIT_ROUTING);
             mHandler.sendEmptyMessage(MSG_COMMIT_ROUTING);
+            return STATUS_OK;
+        }
+        if (mCommitRoutingCountDownLatch != null) {
+            Log.e(TAG, "Routing commit already in progress, ignoring...");
             return STATUS_OK;
         }
         mCommitRoutingCountDownLatch = new CountDownLatch(1);
