@@ -4,6 +4,10 @@ aconfig_declarations {
     package: "com.android.nfc.nci.flags",
     container: "system",
     srcs: ["flags.aconfig"],
+    visibility: [
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 cc_aconfig_library {
