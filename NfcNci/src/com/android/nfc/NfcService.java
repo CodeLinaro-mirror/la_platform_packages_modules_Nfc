@@ -17,6 +17,8 @@
 package com.android.nfc;
 
 import static android.Manifest.permission.BIND_NFC_SERVICE;
+import static android.content.Intent.ACTION_BOOT_COMPLETED;
+import static android.content.Intent.ACTION_LOCKED_BOOT_COMPLETED;
 import static android.nfc.OemLogItems.EVENT_DISABLE;
 import static android.nfc.OemLogItems.EVENT_ENABLE;
 
@@ -116,7 +118,6 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
-import android.view.Display;
 import android.widget.Toast;
 
 import androidx.annotation.VisibleForTesting;
@@ -1112,7 +1113,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(Intent.ACTION_USER_ADDED);
-        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
+        filter.addAction(ACTION_BOOT_COMPLETED);
+        filter.addAction(ACTION_LOCKED_BOOT_COMPLETED);
         filter.addAction(Intent.ACTION_USER_UNLOCKED);
         mContext.registerReceiverForAllUsers(mReceiver, filter, null, null);
     }
@@ -2117,7 +2119,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 listenTech = (NfcAdapter.FLAG_LISTEN_KEEP | NfcAdapter.FLAG_USE_ALL_TECH
                     | NfcAdapter.FLAG_SET_DEFAULT_TECH);
             }
-            mDeviceHost.setDiscoveryTech(NfcAdapter.FLAG_READER_KEEP, listenTech);
+            setDiscoveryTech(NfcAdapter.FLAG_READER_KEEP, listenTech);
         }
     }
 
@@ -2137,8 +2139,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         if (pollTech == -1 || pollTech == DEFAULT_POLL_TECH)
             pollTech = (NfcAdapter.FLAG_READER_KEEP|NfcAdapter.FLAG_USE_ALL_TECH);
 
-        mDeviceHost.setDiscoveryTech(pollTech|NfcAdapter.FLAG_SET_DEFAULT_TECH,
+        setDiscoveryTech(pollTech|NfcAdapter.FLAG_SET_DEFAULT_TECH,
                 listenTech|NfcAdapter.FLAG_SET_DEFAULT_TECH);
+    }
+
+    private void setDiscoveryTech(int pollTech, int listenTech) {
+        if(mReaderModeParams != null) {
+            Log.d(TAG, "setDiscoveryTech mReaderModeParams.flags = 0x"
+                + Integer.toHexString(mReaderModeParams.flags));
+            mDeviceHost.setDiscoveryTech(
+                    mReaderModeParams.flags == DISABLE_POLLING_FLAGS
+                        ? NfcAdapter.FLAG_READER_DISABLE
+                        : mReaderModeParams.flags, listenTech);
+        } else {
+            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+        }
     }
 
     public void playSound(int sound) {
@@ -2172,7 +2187,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.d(TAG, "resetReaderModeParams: Disabling reader mode because app died"
                         + " or moved to background");
                 mReaderModeParams = null;
-                StopPresenceChecking();
+                StopPresenceChecking(false);
                 // listenTech is different from the default value, the stored listenTech will be included.
                 // When using enableReaderMode, change listenTech to default & restore to the previous value.
                 if (isNfcEnabled()) {
@@ -2754,7 +2769,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     listenTech = getNfcListenTech();
                 }
 
-                mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                setDiscoveryTech(pollTech, listenTech);
                 applyRouting(true);
                 return;
             }
@@ -2790,7 +2805,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         listenTech = getNfcListenTech();
                     }
                     try {
-                        mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        setDiscoveryTech(pollTech, listenTech);
                         mDiscoveryTechParams = new DiscoveryTechParams();
                         mDiscoveryTechParams.uid = callingUid;
                         mDiscoveryTechParams.binder = binder;
@@ -2905,7 +2920,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
                         if (mPollingDisableDeathRecipients.size() == 0) {
                             mReaderModeParams = null;
-                            StopPresenceChecking();
+                            StopPresenceChecking(false);
                         }
 
                         if (pollingDisableDeathRecipient != null) {
@@ -3245,7 +3260,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mIsReaderOptionEnabled = enable;
                 mBackupManager.dataChanged();
                 if (isNfcEnabled()) {
-                    mDeviceHost.setDiscoveryTech(getNfcPollTech(), getNfcListenTech());
+                    setDiscoveryTech(getNfcPollTech(), getNfcListenTech());
                 }
             }
             applyRouting(true);
@@ -4642,7 +4657,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
-    private void StopPresenceChecking() {
+    private void StopPresenceChecking(boolean isShutdown) {
         Object[] objectValues = mObjectMap.values().toArray();
         if (!ArrayUtils.isEmpty(objectValues)) {
             // If there are some tags connected, we need to execute the callback to indicate
@@ -4651,8 +4666,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
         for (Object object : objectValues) {
             if (object instanceof TagEndpoint) {
-                TagEndpoint tag = (TagEndpoint)object;
-                ((TagEndpoint) object).stopPresenceChecking();
+                TagEndpoint tag = (TagEndpoint) object;
+                ((TagEndpoint) object).stopPresenceChecking(isShutdown);
             }
         }
     }
@@ -5378,7 +5393,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     }
                     break;
                 case MSG_WATCHDOG_PING:
-                    Log.d(TAG, "handleMessage: MSG_WATCHDOG_PING");
                     NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
                     watchdog.notifyHasReturned();
                     if (mLastFieldOnTimestamp + TIME_TO_MONITOR_AFTER_FIELD_ON_MS >
@@ -5729,7 +5743,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     unregisterObject(tagEndpoint.getHandle());
                     if (mPollDelayTime > NO_POLL_DELAY) {
                         pollingDelay();
-                        tagEndpoint.stopPresenceChecking();
+                        tagEndpoint.stopPresenceChecking(false);
                     } else {
                         Log.d(TAG, "dispatchTagEndpoint: Keep presence checking");
                     }
@@ -5907,7 +5921,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     || action.equals(Intent.ACTION_SCREEN_OFF)
                     || action.equals(Intent.ACTION_USER_PRESENT)) {
                 handleScreenStateChanged();
-            } else if (action.equals(Intent.ACTION_BOOT_COMPLETED) && mIsHceCapable) {
+            } else if ((action.equals(ACTION_BOOT_COMPLETED)
+                    || action.equals(ACTION_LOCKED_BOOT_COMPLETED))
+                    && mIsHceCapable) {
                 if (DBG) Log.d(TAG, action + " received");
                 mCardEmulationManager.onBootCompleted();
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
@@ -6050,6 +6066,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     new EnableDisableTask().execute(TASK_DISABLE_ALWAYS_ON);
                 }
                 if (isNfcEnabled()) {
+                    StopPresenceChecking(true);
                     mDeviceHost.shutdown();
                 }
             }

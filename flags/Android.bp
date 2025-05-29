@@ -23,6 +23,7 @@ aconfig_declarations {
     name: "com.android.nfc.module.flags-aconfig",
     package: "com.android.nfc.module.flags",
     container: "com.android.nfcservices",
+    exportable: true,
     srcs: ["*.aconfig"],
     visibility: [
         "//packages/modules/Nfc:__subpackages__",
@@ -41,6 +42,20 @@ java_aconfig_library {
     visibility: [
         "//packages/modules/Nfc:__subpackages__",
         "//vendor:__subpackages__",
+    ],
+}
+
+java_aconfig_library {
+    name: "com.android.nfc.module.flags-aconfig-exported-java",
+    aconfig_declarations: "com.android.nfc.module.flags-aconfig",
+    defaults: ["framework-minus-apex-aconfig-java-defaults"],
+    min_sdk_version: "36",
+    mode: "exported",
+    apex_available: [
+        "com.android.nfcservices",
+    ],
+    visibility: [
+        "//packages/modules/Nfc:__subpackages__",
     ],
 }
 
