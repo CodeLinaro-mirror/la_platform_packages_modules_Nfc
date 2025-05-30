@@ -178,7 +178,7 @@ import java.util.stream.Collectors;
 
 public class NfcService implements DeviceHostListener, ForegroundUtils.Callback {
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
-    private static final boolean VDBG = false; // turn on for local testing.
+    static final boolean VDBG = NfcProperties.verbose_debug_enabled().orElse(true);
     static final String TAG = "NfcService";
     private static final int APP_INFO_FLAGS_SYSTEM_APP =
             ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
@@ -2060,8 +2060,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mCardEmulationManager.onNfcStateChanged(newState);
                 }
                 if (mState == NfcAdapter.STATE_ON && mCardEmulationManager != null) {
-                    mCardEmulationManager.updateForShouldDefaultToObserveMode(getUserId());
-                    mCardEmulationManager.updateFirmwareExitFramesForWalletRole(getUserId());
+                    // Update default observe mode and exit frames lazily to avoid blocking on
+                    // NfcService.this for a long duration.
+                    mHandler.post(() -> {
+                        Log.d(TAG, "Update default observe mode and exit frames after NFC enable");
+                        mCardEmulationManager.updateForShouldDefaultToObserveMode(getUserId());
+                        mCardEmulationManager.updateFirmwareExitFramesForWalletRole(getUserId());
+                    });
                 }
                 if (mAlwaysOnState != NfcAdapter.STATE_TURNING_ON) {
                     Intent intent = new Intent(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
@@ -5278,7 +5283,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
                 case MSG_APPLY_SCREEN_STATE:
                     mScreenState = (Integer)msg.obj;
-                    Log.d(TAG, "handleMessage: MSG_APPLY_SCREEN_STATE"
+                    Log.d(TAG, "handleMessage: MSG_APPLY_SCREEN_STATE "
                             + ScreenStateHelper.screenStateToString(mScreenState));
 
                     synchronized (NfcService.this) {
@@ -6087,7 +6092,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     + ScreenStateHelper.screenStateToString(screenState));
         }
         if (mScreenState != screenState) {
-            if (nci_version != NCI_VERSION_2_0) {
+            if (nci_version < NCI_VERSION_2_0) {
                 new ApplyRoutingTask().execute(Integer.valueOf(screenState));
             }
             if (DBG) Log.d(TAG, "applyScreenState: screenState != mScreenState=" + mScreenState);
