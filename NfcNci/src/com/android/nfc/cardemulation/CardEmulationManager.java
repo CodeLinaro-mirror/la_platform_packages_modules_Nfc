@@ -386,6 +386,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     public void onOffHostAidSelected(@NonNull String aid, @NonNull String eeName) {
         mHostEmulationManager.onOffHostAidSelectedOrTransaction();
+        mPreferredServices.onOffHostAidSelected();
         if (com.android.nfc.module.flags.Flags.eventListenerOffhostAidSelected()) {
             callNfcEventCallbacks(listener -> listener.onOffHostAidSelected(aid, eeName));
         }
@@ -1392,6 +1393,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 + ", technology: " + technology + ", systemCode: " + sc);
 
             NfcPermissions.enforceAdminPermissions(mContext);
+            if (mForegroundUid != Process.INVALID_UID) {
+                throw new IllegalStateException(
+                    "overwriteRoutingTable(): Fg app has overridden routing table");
+            }
 
             int aidRoute = (aids != null && aids.equals("default"))
                     ? mRoutingOptionManager.getDefaultRoute()

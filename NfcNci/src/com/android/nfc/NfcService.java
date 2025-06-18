@@ -1625,11 +1625,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
                 List<PackageInfo> packagesNfcEvents = pm.getPackagesHoldingPermissions(
                         new String[] {android.Manifest.permission.NFC_TRANSACTION_EVENT},
-                        PackageManager.GET_ACTIVITIES);
+                        0);
                 List<PackageInfo> packagesNfcPreferredPaymentChanged =
                         pm.getPackagesHoldingPermissions(
                         new String[] {android.Manifest.permission.NFC_PREFERRED_PAYMENT_INFO},
-                        PackageManager.GET_ACTIVITIES);
+                        0);
                 List<String> packageListNfcEvent = new ArrayList<String>();
                 for (int i = 0; i < packagesNfcEvents.size(); i++) {
                     packageListNfcEvent.add(packagesNfcEvents.get(i).packageName);
@@ -2288,9 +2288,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean enable(String pkg) throws RemoteException {
-            if (Flags.checkPassedInPackage()) {
-                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
-            }
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -2341,9 +2339,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean disable(boolean saveState, String pkg) throws RemoteException {
-            if (Flags.checkPassedInPackage()) {
-                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
-            }
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
 
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
@@ -2412,9 +2408,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean setObserveMode(boolean enable, String packageName) {
             synchronized (NfcService.this) {
-                if (Flags.checkPassedInPackage()) {
-                    mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
-                }
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
                 if (!isNfcEnabled()) {
                     Log.e(TAG, "setObserveMode: NFC must be enabled but is: " + mState);
                     return false;
@@ -2759,9 +2753,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void updateDiscoveryTechnology(
                 IBinder binder, int pollTech, int listenTech, String packageName)
                 throws RemoteException {
-            if (Flags.checkPassedInPackage()) {
-                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
-            }
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
             NfcPermissions.enforceUserPermissions(mContext);
             int callingUid = Binder.getCallingUid();
             boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
@@ -2892,9 +2884,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void setReaderMode(
                 IBinder binder, IAppCallback callback, int flags, Bundle extras, String packageName)
                 throws RemoteException {
-            if (Flags.checkPassedInPackage()) {
-                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
-            }
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
             int callingUid = Binder.getCallingUid();
             int callingPid = Binder.getCallingPid();
             boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
@@ -3541,7 +3531,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throws RemoteException {
             if (DBG) Log.i(TAG, "registerOemExtensionCallback");
             NfcPermissions.enforceAdminPermissions(mContext);
-            mNfcOemExtensionCallback = callbacks;
+            synchronized (NfcService.this) {
+                mNfcOemExtensionCallback = callbacks;
+                mNfcOemExtensionCallback.asBinder().linkToDeath(mOemExtensionCbDeathRecipient, 0);
+            }
             updateNfCState();
             if (mCardEmulationManager != null) {
                 mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
@@ -3556,7 +3549,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throws RemoteException {
             if (DBG) Log.i(TAG, "unregisterOemExtensionCallback");
             NfcPermissions.enforceAdminPermissions(mContext);
-            mNfcOemExtensionCallback = null;
+            synchronized (NfcService.this) {
+                if (mNfcOemExtensionCallback == null) return;
+                mNfcOemExtensionCallback.asBinder().unlinkToDeath(mOemExtensionCbDeathRecipient, 0);
+                mNfcOemExtensionCallback = null;
+            }
             if (mCardEmulationManager != null) {
                 mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
             }
@@ -3658,9 +3655,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public void indicateDataMigration(boolean inProgress, String pkg) throws RemoteException {
-            if (Flags.checkPassedInPackage()) {
-                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
-            }
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
             if (DBG) Log.i(TAG, "indicateDataMigration: inProgress: " + inProgress);
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcEventLog.logEvent(
@@ -3740,6 +3735,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    private final IBinder.DeathRecipient mOemExtensionCbDeathRecipient = () -> {
+        synchronized (NfcService.this) {
+            Log.w(TAG, "binderDied: OEM extension died");
+            mNfcOemExtensionCallback = null;
+        }
+    };
 
     final class SeServiceDeathRecipient implements IBinder.DeathRecipient {
         @Override
