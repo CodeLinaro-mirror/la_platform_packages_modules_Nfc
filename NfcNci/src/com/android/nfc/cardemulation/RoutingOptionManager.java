@@ -50,6 +50,7 @@ public class RoutingOptionManager {
     public static final String KEY_DEFAULT_ROUTE = "default_route";
     public static final String KEY_DEFAULT_ISO_DEP_ROUTE = "default_iso_dep_route";
     public static final String KEY_DEFAULT_OFFHOST_ROUTE = "default_offhost_route";
+    public static final String KEY_DEFAULT_FELICA_ROUTE = "default_felica_route";
     public static final String KEY_DEFAULT_SC_ROUTE = "default_sc_route";
     public static final String KEY_AUTO_CHANGE_CAPABLE = "allow_auto_routing_changed";
     Context mContext;
@@ -240,9 +241,24 @@ public class RoutingOptionManager {
                     KEY_DEFAULT_OFFHOST_ROUTE, getSecureElementForRoute(mDefaultOffHostRoute));
         }
 
+        if (mOverrideDefaultFelicaRoute != ROUTE_UNKNOWN) {
+            if (mOverrideDefaultFelicaRoute == ROUTE_DEFAULT) {
+                Log.i(TAG, "overwriteRoutingTable: overwrite mDefaultFelicaRoute with "
+                        + "default config value");
+                mDefaultFelicaRoute = doGetDefaultFelicaRouteDestination();
+            } else {
+                Log.d(TAG, "overwriteRoutingTable: mDefaultFelicaRoute : "
+                        + Integer.toHexString(mOverrideDefaultFelicaRoute));
+                mDefaultFelicaRoute = mOverrideDefaultFelicaRoute;
+            }
+            writeRoutingOption(
+                    KEY_DEFAULT_FELICA_ROUTE, getSecureElementForRoute(mDefaultFelicaRoute));
+        }
+
         if (mOverrideDefaultScRoute != ROUTE_UNKNOWN) {
             if (mOverrideDefaultScRoute == ROUTE_DEFAULT) {
-                Log.i(TAG, "overwriteRoutingTable: mDefaultScRoute with default config value");
+                Log.i(TAG, "overwriteRoutingTable: overwrite mDefaultScRoute with "
+                        + "default config value");
                 mDefaultScRoute = doGetDefaultScRouteDestination();
             } else {
                 Log.d(TAG, "overwriteRoutingTable: mDefaultScRoute : "
@@ -263,17 +279,42 @@ public class RoutingOptionManager {
 
     public void overrideDefaultIsoDepRoute(int isoDepRoute) {
         mOverrideDefaultIsoDepRoute = isoDepRoute;
+        if (isoDepRoute == ROUTE_DEFAULT) {
+            isoDepRoute = doGetDefaultIsoDepRouteDestination();
+        }
         NfcService.getInstance().setIsoDepProtocolRoute(isoDepRoute);
     }
 
     public void overrideDefaultOffHostRoute(int offHostRoute) {
         mOverrideDefaultOffHostRoute = offHostRoute;
         mOverrideDefaultFelicaRoute = offHostRoute;
+        if (offHostRoute == ROUTE_DEFAULT) {
+            offHostRoute = doGetDefaultOffHostRouteDestination();
+        }
         NfcService.getInstance().setTechnologyABFRoute(offHostRoute, offHostRoute);
+    }
+
+    /**
+     * Overwrite the default technolygy route destinations in the routing table
+     *
+     */
+    public void overrideDefaultTechRoute(int abRoute, int fRoute) {
+        mOverrideDefaultOffHostRoute = abRoute;
+        mOverrideDefaultFelicaRoute = fRoute;
+        if (abRoute == ROUTE_DEFAULT) {
+            abRoute = doGetDefaultOffHostRouteDestination();
+        }
+        if (fRoute == ROUTE_DEFAULT) {
+            fRoute = doGetDefaultFelicaRouteDestination();
+        }
+        NfcService.getInstance().setTechnologyABFRoute(abRoute, fRoute);
     }
 
     public void overrideDefaultScRoute(int scRoute) {
         mOverrideDefaultScRoute = scRoute;
+        if (scRoute == ROUTE_DEFAULT) {
+            scRoute = doGetDefaultScRouteDestination();
+        }
         NfcService.getInstance().setSystemCodeRoute(scRoute);
     }
 
@@ -377,6 +418,7 @@ public class RoutingOptionManager {
         return !TextUtils.isEmpty(deviceConfigFacade.getDefaultRoute())
                 || !TextUtils.isEmpty(deviceConfigFacade.getDefaultIsoDepRoute())
                 || !TextUtils.isEmpty(deviceConfigFacade.getDefaultOffHostRoute())
+                || !TextUtils.isEmpty(deviceConfigFacade.getDefaultFelicaRoute())
                 || !TextUtils.isEmpty(deviceConfigFacade.getDefaultScRoute())
                 || !prefs.getAll().isEmpty();
     }
@@ -422,6 +464,14 @@ public class RoutingOptionManager {
         }
         mDefaultOffHostRoute =
             getRouteForSecureElement(mPrefs.getString(KEY_DEFAULT_OFFHOST_ROUTE, null));
+
+        // read default felica route
+        if (!mPrefs.contains(KEY_DEFAULT_FELICA_ROUTE)) {
+            writeRoutingOption(
+                    KEY_DEFAULT_FELICA_ROUTE, deviceConfigFacade.getDefaultFelicaRoute());
+        }
+        mDefaultFelicaRoute =
+            getRouteForSecureElement(mPrefs.getString(KEY_DEFAULT_FELICA_ROUTE, null));
 
         // read default system code route
         if (!mPrefs.contains(KEY_DEFAULT_SC_ROUTE)) {
