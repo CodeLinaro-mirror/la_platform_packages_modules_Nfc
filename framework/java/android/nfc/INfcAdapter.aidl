@@ -96,6 +96,7 @@ interface INfcAdapter
     boolean isObserveModeSupported();
     boolean isObserveModeEnabled();
     boolean setObserveMode(boolean enabled, String pkg);
+    boolean isExitFramesSupported();
     boolean isPowerSavingModeSupported();
     boolean isPowerSavingModeEnabled();
     void setPowerSavingMode(boolean enabled);
