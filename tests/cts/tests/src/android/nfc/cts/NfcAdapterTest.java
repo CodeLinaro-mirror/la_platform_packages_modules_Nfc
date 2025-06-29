@@ -335,6 +335,20 @@ public class NfcAdapterTest {
     }
 
     @Test
+    @RequiresFlagsEnabled(Flags.FLAG_NFC_SET_DEFAULT_DISC_TECH)
+    public void testSetDiscoveryTechnologyWithoutActivity() {
+        NfcAdapter adapter = getDefaultAdapter();
+        // CTS has privileged permission to set discovery technology with null activity.
+        // This test is to ensure that the API does not crash or throw any exceptions.
+        adapter.setDiscoveryTechnology(null,
+                NfcAdapter.FLAG_READER_KEEP,
+                NfcAdapter.FLAG_LISTEN_NFC_PASSIVE_B
+                | NfcAdapter.FLAG_SET_DEFAULT_TECH);
+        adapter.setDiscoveryTechnology(null, NfcAdapter.FLAG_READER_KEEP,
+                NfcAdapter.FLAG_LISTEN_KEEP | NfcAdapter.FLAG_SET_DEFAULT_TECH | 0xff);
+    }
+
+    @Test
     @RequiresFlagsEnabled(Flags.FLAG_ENABLE_NFC_MAINLINE)
     public void testSetReaderMode() {
         assumeTrue(mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_NFC));
@@ -680,6 +694,13 @@ public class NfcAdapterTest {
             cardEmulation.unsetPreferredService(activity);
             adapter.notifyHceDeactivated();
         }
+    }
+
+    @Test
+    @RequiresFlagsEnabled(com.android.nfc.module.flags.Flags.FLAG_OEM_EXTENSION_25Q4)
+    public void testIsExitFramesSupported() {
+        NfcAdapter adapter = getDefaultAdapter();
+        adapter.isExitFramesSupported();
     }
 
     @Test
