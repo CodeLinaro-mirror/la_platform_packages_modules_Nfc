@@ -74,6 +74,9 @@ public interface DeviceHost {
          * On Restart Rf Discovery
          */
         void onRestartRfDiscovery();
+
+        /** Notifies TZ Secure Zone Notification **/
+        public void onTZNfcSecureZoneReported();
     }
 
     public interface TagEndpoint {
