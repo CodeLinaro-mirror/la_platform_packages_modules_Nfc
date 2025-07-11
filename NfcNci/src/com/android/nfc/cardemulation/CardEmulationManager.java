@@ -175,6 +175,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     private final ExecutorService mCommitRoutingExecutor = Executors.newSingleThreadExecutor();
 
     private boolean mIsEuiccCapable;
+    private final NfcPermissions mNfcPermissions;
 
     // TODO: Move this object instantiation and dependencies to NfcInjector.
     public CardEmulationManager(Context context, NfcInjector nfcInjector,
@@ -217,6 +218,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mPreferredSubscriptionService = new PreferredSubscriptionService(mContext, this);
         mStatsdUtils = nfcInjector.getStatsdUtils();
         mDeviceConfigFacade = deviceConfigFacade;
+        mNfcPermissions = new NfcPermissions(mContext);
         initialize();
     }
 
@@ -265,6 +267,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mPreferredSubscriptionService = preferredSubscriptionService;
         mStatsdUtils = statsdUtils;
         mDeviceConfigFacade = deviceConfigFacade;
+        mNfcPermissions = new NfcPermissions(mContext);
         initialize();
     }
 
@@ -370,6 +373,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             mHostNfcFEmulationManager.onHostEmulationDeactivated();
             mNfcFServicesCache.onHostEmulationDeactivated();
             mEnabledNfcFServices.onHostEmulationDeactivated();
+            mHostEmulationManager.onNfcFHostEmulationDeactivated();
         }
         if (mNfcOemExtensionCallback != null) {
             try {
@@ -1294,7 +1298,23 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             if (!mDeviceConfigFacade.getEnableServiceOther())
               return SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
             NfcPermissions.enforceUserPermissions(mContext);
-
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setServiceOtherStateChange(
+                                NfcEventProto.NfcServiceOtherStateChange.newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                app.getPackageName())
+                                            .setClassName(
+                                                app.getClassName())
+                                            .build())
+                                    .setEnabled(status)
+                                    .build())
+                            .build());
             return mServiceCache.registerOtherForService(userId, app, status);
         }
 
@@ -1387,13 +1407,22 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         @Override
         public void overwriteRoutingTable(int userHandle, String aids,
-                String protocol, String technologyAB, String technologyF, String sc) {
+                String protocol, String technologyAB, String technologyF, String sc,
+                String pkg) {
             Log.d(TAG, "overwriteRoutingTable(): userHandle: " + userHandle
                     + ", emptyAid: " + aids + ", protocol: " + protocol
                     + ", technologyAB: " + technologyAB + ", technologyF: " + technologyF
                     + ", systemCode: " + sc);
-
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
             NfcPermissions.enforceAdminPermissions(mContext);
+            // If the OEM has set a list of allowed packages, check if the calling package is in
+            // the list.
+            List<String> allowListPkgs =
+                Arrays.asList(mDeviceConfigFacade.getOverwriteRoutingTableAllowListPkgs());
+            if (allowListPkgs.size() > 0 && !allowListPkgs.contains(pkg)) {
+                throw new IllegalArgumentException(
+                    "overwriteRoutingTable: pkg " + pkg + " is not in allow list");
+            }
             if (mForegroundUid != Process.INVALID_UID) {
                 throw new IllegalStateException(
                     "overwriteRoutingTable(): Fg app has overridden routing table");
