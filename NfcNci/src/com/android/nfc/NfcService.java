@@ -1618,8 +1618,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 .filter((pkg) -> pkg.requestedPermissions != null
                         && Arrays.asList(pkg.requestedPermissions).contains(permission))
                 .map((pkg) -> pkg.packageName)
-                .toList();
-        Log.d(TAG, "got " + packages.size() + " packages holding permission " + permission);
+                .collect(Collectors.toList());
+        if (VDBG) {
+            Log.v(TAG, "got " + packages.size() + " packages holding permission " + permission);
+        }
         return packages;
     }
 
@@ -1643,12 +1645,23 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     continue;
                 }
 
-                mNfcEventInstalledPackages.put(
-                        uh.getIdentifier(),
-                        getPackagesHoldingPermission(pm, NFC_TRANSACTION_EVENT));
+                List<String> nfcEventInstalledPackages =
+                        getPackagesHoldingPermission(pm, NFC_TRANSACTION_EVENT);
+                // Add "android" to the list of installed packages.
+                if (nfcEventInstalledPackages != null
+                        && !nfcEventInstalledPackages.contains("android")) {
+                    nfcEventInstalledPackages.add("android");
+                }
+                mNfcEventInstalledPackages.put(uh.getIdentifier(), nfcEventInstalledPackages);
+                List<String> nfcPreferredPaymentChangedInstalledPackages =
+                        getPackagesHoldingPermission(pm, NFC_PREFERRED_PAYMENT_INFO);
+                // Add "android" to the list of installed packages.
+                if (nfcPreferredPaymentChangedInstalledPackages != null
+                        && !nfcPreferredPaymentChangedInstalledPackages.contains("android")) {
+                    nfcPreferredPaymentChangedInstalledPackages.add("android");
+                }
                 mNfcPreferredPaymentChangedInstalledPackages.put(
-                        uh.getIdentifier(),
-                        getPackagesHoldingPermission(pm, NFC_PREFERRED_PAYMENT_INFO));
+                        uh.getIdentifier(), nfcPreferredPaymentChangedInstalledPackages);
             }
         }
     }
@@ -3710,6 +3723,72 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             int timeoutOverlay = mContext.getResources()
                     .getInteger(R.integer.max_pause_polling_time_out_ms);
             return timeoutOverlay > 0 ? (long) timeoutOverlay : MAX_POLLING_PAUSE_TIMEOUT;
+        }
+
+        @Override
+        public int emulateNfcATag(boolean setConfig, int bitFrameSdd, int platformConfig,
+                int selInfo, byte[] nfcid1, int rats, byte[] histBytes) {
+            Log.i(TAG, "emulateNfcACard: setConfig:" + setConfig);
+            NfcPermissions.enforceAdminPermissions(mContext);
+            if (!isNfcEnabled()) {
+                Log.e(TAG, "emulateNfcACard: NFC is not enabled, ignore");
+                return NfcOemExtension.EMULATE_NFC_A_TAG_STATUS_FAILED_NFC_NOT_ENABLED;
+            }
+            byte[] param = new byte[1];
+            synchronized (NfcService.this) {
+                // stop discovery
+                mDeviceHost.disableDiscovery();
+
+                // Set parameters
+                if (setConfig) {
+                    // Indicate custom config
+                    param[0] = 0x00;
+                    mDeviceHost.setNciConfig(0x85, param, param.length, false);
+
+                    // LA_BIT_FRAME_SDD
+                    param[0] = (byte) bitFrameSdd;
+                    mDeviceHost.setNciConfig(0x30, param, param.length, true);
+
+                    // LA_PLATFORM_CONFIG
+                    param[0] = (byte) platformConfig;
+                    mDeviceHost.setNciConfig(0x31, param, param.length, true);
+
+                    // LA_SEL_INFO
+                    param[0] = (byte) selInfo;
+                    mDeviceHost.setNciConfig(0x32, param, param.length, true);
+
+                    // LA_NFCID1
+                    mDeviceHost.setNciConfig(0x33, nfcid1, nfcid1.length, true);
+
+                    // LI_A_RATS_TB1
+                    param[0] = (byte) rats;
+                    mDeviceHost.setNciConfig(0x58, param, param.length, true);
+
+                    // LI_A_HIST_BY
+                    if (histBytes != null) {
+                        mDeviceHost.setNciConfig(0x59, histBytes, histBytes.length, true);
+                    }
+                } else {
+                    // Reset custom config
+                    param[0] = 0x01;
+                    mDeviceHost.setNciConfig(0x85, param, param.length, false);
+
+                    nfcid1 = new byte[]{};
+                    mDeviceHost.setNciConfig(0x33, nfcid1, nfcid1.length, false);
+
+                    // LI_A_RATS_TB1
+                    param[0] = 0x0;
+                    mDeviceHost.setNciConfig(0x58, param, param.length, false);
+
+                    histBytes = new byte[]{};
+                    mDeviceHost.setNciConfig(0x59, histBytes, histBytes.length, false);
+
+                }
+
+                applyRouting(true);
+            }
+
+            return NfcOemExtension.EMULATE_NFC_A_TAG_STATUS_OK;
         }
 
         private void updateNfCState() {
