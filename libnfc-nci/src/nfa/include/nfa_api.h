@@ -179,6 +179,8 @@ typedef uint8_t tNFA_PROTOCOL_MASK;
 #define NFA_RW_NDEF_FL_UNKNOWN RW_NDEF_FL_UNKNOWN
 /* Tag supports format operation */
 #define NFA_RW_NDEF_FL_FORMATABLE RW_NDEF_FL_FORMATABLE
+/* Secure  Zone Event Falg */
+#define NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT 0xC1
 
 typedef uint8_t tNFA_RW_NDEF_FLAG;
 

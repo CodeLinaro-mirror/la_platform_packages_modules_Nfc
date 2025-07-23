@@ -839,6 +839,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         restartStack();
     }
 
+    /** TZ Secure Zone Notification to Disable NFC **/
+    @Override
+    public void onTZNfcSecureZoneReported() {
+        if (DBG) Log.d(TAG, "onTZNfcSecureZoneReported() - Disbaling NFC Service");
+        new EnableDisableTask().execute(TASK_DISABLE);
+    }
+
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
     @Override
     public void onCommandTimeout() {

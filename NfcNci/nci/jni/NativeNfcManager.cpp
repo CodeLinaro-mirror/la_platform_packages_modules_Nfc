@@ -120,6 +120,7 @@ jmethodID gCachedNfcManagerOnRestartRfDiscovery;
 jmethodID gCachedNfcManagerOnObserveModeDisabledInFirmware;
 jmethodID gCachedNfcManagerOnObserveModeEnabledInFirmware;
 jmethodID gCachedNfcManagerNotifyEndpointRemoved;
+jmethodID gCachedNfcManagerNotifyTZNfcSecureZoneReported;
 
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
@@ -205,6 +206,7 @@ static int NFA_SCREEN_POLLING_TAG_MASK = 0x10;
 bool gIsDtaEnabled = false;
 static bool gObserveModeEnabled = false;
 static int gPartialInitMode = ENABLE_MODE_DEFAULT;
+static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject);
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////
 
@@ -829,6 +831,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   gCachedNfcManagerOnRestartRfDiscovery =
       e->GetMethodID(cls.get(), "onRestartRfDiscovery", "()V");
 
+  gCachedNfcManagerNotifyTZNfcSecureZoneReported =
+      e->GetMethodID(cls.get(), "notifyTZNfcSecureZoneReported", "()V");
+
   gCachedNfcManagerOnObserveModeDisabledInFirmware =
       e->GetMethodID(cls.get(), "onObserveModeDisabledInFirmware", "(I[B)V");
 
@@ -1057,6 +1062,25 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
       SyncEventGuard guard(sNfaSetPowerSubState);
       sNfaSetPowerSubState.notifyOne();
     } break;
+
+    case NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT: /*TZ Secure Zone entry event to Disable NFC*/ {
+     LOG(DEBUG) << StringPrintf("%s: NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT; received from TZ and disabling NFC", __func__);
+      struct nfc_jni_native_data* nat = getNative(NULL, NULL);
+      JNIEnv* t = NULL;
+      ScopedAttach attach(nat->vm, &t);
+      if (t == NULL) {
+        LOG(ERROR) << StringPrintf("%s; jni env is null, crashing NFC service", __func__);
+//PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
+        //////////////////////////////////////////////
+        // crash the NFC service process so it can restart automatically
+        abort();
+        //////////////////////////////////////////////
+      } else {
+        t->CallVoidMethod(nat->manager,
+                               android::gCachedNfcManagerNotifyTZNfcSecureZoneReported);
+      }
+    } break;
+
     default:
       LOG(DEBUG) << StringPrintf("%s: unhandled event", __func__);
       break;

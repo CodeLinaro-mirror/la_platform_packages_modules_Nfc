@@ -406,6 +406,12 @@ static void nfa_dm_nfc_response_cback(tNFC_RESPONSE_EVT event,
       nfa_dm_conn_cback_event_notify(NFA_UPDATE_RF_PARAM_RESULT_EVT, &conn_evt);
       break;
 
+    case NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT:
+      dm_cback_data.rf_field.status = NFA_STATUS_OK;
+      dm_cback_data.rf_field.rf_field_status = p_data->rf_field.rf_field;
+      (*nfa_dm_cb.p_dm_cback)(NFA_DM_TZ_SECURE_ZONE_DISABLE_NFC_EVT, &dm_cback_data);
+      break;
+
     default:
       break;
   }
@@ -1874,6 +1880,8 @@ std::string nfa_dm_nfc_revt_2_str(tNFC_RESPONSE_EVT event) {
       return "NFC_NFCC_POWER_OFF_REVT";
     case NFC_NFCEE_STATUS_REVT:
       return "NFC_NFCEE_STATUS_REVT";
+    case NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT:
+      return "NFC_TZ_SECURE_ZONE_DISABLE_NFC_REVT";
     default:
       return "unknown revt";
   }
