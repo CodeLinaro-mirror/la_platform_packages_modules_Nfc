@@ -2604,6 +2604,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     }
                 }
                 mHandler.removeMessages(MSG_RESUME_POLLING);
+                if (mCardEmulationManager != null) {
+                    mCardEmulationManager.resetToIdleState();
+                }
                 mPollingPaused = false;
                 new ApplyRoutingTask().execute();
                 if (DBG) Log.d(TAG, "resumePolling: done");
@@ -2853,6 +2856,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     listenTech = getNfcListenTech();
                 }
 
+                if (mCardEmulationManager != null) {
+                    mCardEmulationManager.resetToIdleState();
+                }
                 setDiscoveryTech(pollTech, listenTech);
                 applyRouting(true);
                 return;
@@ -2916,7 +2922,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 } else {
                     return;
                 }
-
+                if (mCardEmulationManager != null) {
+                    mCardEmulationManager.resetToIdleState();
+                }
                 applyRouting(true);
             }
         }
@@ -3031,6 +3039,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                         .build())
                                 .build());
                 if (isNfcEnabled()) {
+                    if (mCardEmulationManager != null) {
+                        mCardEmulationManager.resetToIdleState();
+                    }
                     applyRouting(false);
                 }
             }
@@ -4701,7 +4712,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             Log.d(TAG, "applyRouting");
         }
         synchronized (this) {
-            if (isNfcDisabledOrDisabling()) {
+            if (!isNfcEnabled()) {
+                Log.d(TAG, "applyRouting: skip because nfc is not enabled");
                 return;
             }
             if (mNfcOemExtensionCallback != null
@@ -6118,6 +6130,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 if (mIsHceCapable) {
                     mCardEmulationManager.onUserSwitched(getUserId());
                 }
+
+                mNfcInjector.onUserSwitched();
                 applyScreenState(mScreenStateHelper.checkScreenState(mCheckDisplayStateForScreenState));
 
                 if ((NFC_SNOOP_LOG_MODE.equals(NfcProperties.snoop_log_mode_values.FULL) ||
