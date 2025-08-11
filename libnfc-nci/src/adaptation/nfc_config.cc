@@ -25,6 +25,8 @@
 #include <mutex>
 
 #include "NfcAdaptation.h"
+#include <filesystem>
+
 
 using namespace ::std;
 using namespace ::android::base;
@@ -36,7 +38,7 @@ static std::mutex config_mutex;
 namespace {
 std::string searchConfigPath(std::string file_name) {
   const std::vector<std::string> search_path = {
-      "/vendor/etc/", "/odm/etc/", "/product/etc/", "/system_ext/etc/", "/etc/",
+      "/product/etc/", "/odm/etc/", "/vendor/etc/", "/system_ext/etc/", "/etc/",
       "/apex/com.android.nfcservices/etc/"
   };
   for (std::string path : search_path) {
@@ -67,7 +69,16 @@ std::string findConfigPath() {
   if (!f_path.empty()) return f_path;
 
   // load default file if the desired file not found.
-  return searchConfigPath("libnfc-nci.conf");
+	if (std::filesystem::exists("/dev/nq-nci")){
+		return searchConfigPath("libnfc-nci-NXP.conf");
+	}
+	else if (std::filesystem::exists("/dev/st21nfc")) {
+		return searchConfigPath("libnfc-nci-STM.conf");
+	}
+	else
+	{
+		return searchConfigPath("libnfc-nci.conf");
+	}
 }
 
 }  // namespace
