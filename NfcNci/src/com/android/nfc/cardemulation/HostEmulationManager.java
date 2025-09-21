@@ -654,14 +654,35 @@ public class HostEmulationManager {
                     if (DBG) Log.d(TAG, "onPollingLoopDetected: POLLING_LOOP_TYPE_UNKNOWN");
                     byte[] data = pollingFrame.getData();
                     String dataStr = HexFormat.of().formatHex(data).toUpperCase(Locale.ROOT);
-                    List<ApduServiceInfo> serviceInfos =
-                            mPollingLoopFilters.get(ActivityManager.getCurrentUser()).get(dataStr);
+                    Map<String, List<ApduServiceInfo>> MappingForUser =
+                            mPollingLoopFilters.get(ActivityManager.getCurrentUser());
+                    List<ApduServiceInfo> serviceInfos;
+                    if (MappingForUser != null) {
+                        serviceInfos = MappingForUser.get(dataStr);
+                    } else {
+                        Log.e(TAG, "MappingForUser is null, CurrentUser: "
+                                + ActivityManager.getCurrentUser());
+                        serviceInfos = null;
+                    }
                     Map<Pattern, List<ApduServiceInfo>> patternMappingForUser =
                             mPollingLoopPatternFilters.get(ActivityManager.getCurrentUser());
-                    Set<Pattern> patternSet = patternMappingForUser.keySet();
-                    List<Pattern> matchedPatterns = patternSet.stream()
+                    Set<Pattern> patternSet;
+                    if (patternMappingForUser != null) {
+                        patternSet = patternMappingForUser.keySet();
+                    } else {
+                        Log.e(TAG, "patternMappingForUser is null, CurrentUser: "
+                                + ActivityManager.getCurrentUser());
+                        patternSet = null;
+                    }
+                    List<Pattern> matchedPatterns;
+                    if (patternSet != null) {
+                        matchedPatterns = patternSet.stream()
                             .filter(p -> p.matcher(dataStr).matches()).toList();
-                    if (!matchedPatterns.isEmpty()) {
+                    } else {
+                        Log.e(TAG, "patternSet is null");
+                        matchedPatterns = null;
+                    }
+                    if (matchedPatterns != null && !matchedPatterns.isEmpty()) {
                         if (serviceInfos == null) {
                             serviceInfos = new ArrayList<ApduServiceInfo>();
                         }
