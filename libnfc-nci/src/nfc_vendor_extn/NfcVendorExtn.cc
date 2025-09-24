@@ -25,6 +25,7 @@
 #include <error.h>
 #include <log/log.h>
 #include <string>
+#include <filesystem>
 
 using android::base::StringPrintf;
 #define UNUSED_PROP(X) (void)(X);
@@ -92,7 +93,16 @@ namespace {
     if (!f_path.empty()) return f_path;
 
     // load default file if the desired file not found.
-    return searchLibPath("libnfc_vendor_extn.so");
+    if (std::filesystem::exists("/dev/st21nfc")) {
+      return searchLibPath("libnfc_vendor_extn_st.so");
+    }
+    else if(std::filesystem::exists("/dev/nq-nci")){
+      return searchLibPath("libnfc_vendor_extn_nxp.so");
+    }
+    else
+    {
+      return searchLibPath("libnfc_vendor_extn.so");
+    }
   }
 }  // namespace
 
