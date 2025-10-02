@@ -71,6 +71,7 @@ static const uint16_t DEFAULT_SYS_CODE = 0xFEFE;
 
 static const uint8_t AID_ROUTE_QUAL_PREFIX = 0x10;
 
+static bool gFirstRun = true;
 static Mutex sEeInfoMutex;
 static Mutex sEeInfoChangedMutex;
 
@@ -292,6 +293,7 @@ bool RoutingManager::isTypeATypeBTechSupportedInEe(tNFA_HANDLE eeHandle) {
   }
 
   if (mEuiccMepMode) {
+    actualNbEe = NFA_EE_MAX_EE_SUPPORTED;
     memset(&eeInfo, 0, actualNbEe * sizeof(tNFA_EE_INFO));
     nfaStat = NFA_EeGetMepInfo(&actualNbEe, eeInfo);
     if (nfaStat != NFA_STATUS_OK) {
@@ -966,7 +968,7 @@ void RoutingManager::updateDefaultRoute() {
                              mDefaultSysCodeRoute);
 
   // remove SC routing
-  {
+  if (!gFirstRun) {
     SyncEventGuard guard(mRoutingEvent);
     tNFA_STATUS stat = NFA_EeRemoveSystemCodeRouting(mDefaultSysCode);
     if (sIsRecovering) return;
@@ -1007,8 +1009,9 @@ void RoutingManager::updateDefaultRoute() {
                                         NFA_HANDLE_GROUP_EE))) {
       defaultAidRoute = NFC_DH_ID;
     }
-
-    removeAidRouting(nullptr, 0);
+    if (!gFirstRun) {
+      removeAidRouting(nullptr, 0);
+    }
     uint8_t powerState = 0x01;
     if (!mSecureNfcEnabled) {
       powerState =
@@ -1022,6 +1025,7 @@ void RoutingManager::updateDefaultRoute() {
       mDefaultAidRouteAdded = true;
     }
   }
+  gFirstRun = false;
 }
 
 /*******************************************************************************
