@@ -637,8 +637,12 @@ static bool rw_mfc_send_to_lower(NFC_HDR* p_data) {
   /* Indicate first attempt to send command, back up cmd buffer in case needed
    * for retransmission */
   rw_cb.cur_retry = 0;
-  memcpy(p_mfc->p_cur_cmd_buf, p_data,
-         sizeof(NFC_HDR) + p_data->offset + p_data->len);
+  if (!p_mfc->p_cur_cmd_buf) {
+    LOG(ERROR) << StringPrintf("%s: p_mfc->p_cur_cmd_buf null", __func__);
+  } else {
+    memcpy(p_mfc->p_cur_cmd_buf, p_data,
+           sizeof(NFC_HDR) + p_data->offset + p_data->len);
+  }
 
   if (NFC_SendData(NFC_RF_CONN_ID, p_data) != NFC_STATUS_OK) {
     LOG(ERROR) << __func__ << ": NFC_SendData () failed";
@@ -1247,7 +1251,7 @@ static void rw_mfc_handle_read_op(uint8_t* data) {
         p_mfc->ndef_status = MFC_NDEF_DETECTED;
         p_mfc->ndef_first_block = p_mfc->last_block_accessed.block;
         rw_mfc_ntf_tlv_detect_complete(NFC_STATUS_OK);
-      } else if (mfc_read_mad()) {
+      } else {
         tRW_DETECT_NDEF_DATA ndef_data;
         ndef_data.status = NFC_STATUS_FAILED;
         ndef_data.protocol = NFC_PROTOCOL_MIFARE;

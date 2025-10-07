@@ -28,7 +28,9 @@ import android.annotation.DurationMillisLong;
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.content.ComponentName;
 import android.content.Context;
@@ -897,7 +899,8 @@ public final class NfcOemExtension {
                         protocolRoute,
                         technologyRoute,
                         technologyRoute,
-                        systemCodeRoute
+                        systemCodeRoute,
+                        mContext.getPackageName()
                 ));
     }
 
@@ -946,7 +949,8 @@ public final class NfcOemExtension {
                         protocolRoute,
                         technologyABRoute,
                         technologyFRoute,
-                        systemCodeRoute
+                        systemCodeRoute,
+                        mContext.getPackageName()
                 ));
     }
 
@@ -1002,6 +1006,73 @@ public final class NfcOemExtension {
     public int forceRoutingTableCommit() {
         return NfcAdapter.callServiceReturn(
                 () -> NfcAdapter.sService.commitRouting(), COMMIT_ROUTING_STATUS_FAILED);
+    }
+
+    /**
+     * Status code returned when emulateNfcTechnologyATag request succeeded.
+     * @see #emulateNfcTechnologyATag(boolean, byte, byte, byte, byte[], byte, byte[])
+     */
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_OEM_EXTENSION_25Q4)
+    public static final int EMULATE_NFC_A_TAG_STATUS_OK = 0;
+    /**
+     * Status code returned when emulateNfcTechnologyATag request failed due to NFC is not enabled.
+     * @see #emulateNfcTechnologyATag(boolean, byte, byte, byte, byte[], byte, byte[])
+     */
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_OEM_EXTENSION_25Q4)
+    public static final int EMULATE_NFC_A_TAG_STATUS_FAILED_NFC_NOT_ENABLED = 1;
+    /**
+     * Status code returned when switching NFC route setting failed.
+     * @see #emulateNfcTechnologyATag(boolean, byte, byte, byte, byte[], byte, byte[])
+     */
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_OEM_EXTENSION_25Q4)
+    public static final int EMULATE_NFC_A_TAG_STATUS_FAILED_INTERNAL = 2;
+
+    /**
+     * Status codes returned when calling {@link #emulateNfcTechnologyATag(boolean, byte,
+     * byte, byte, byte[], byte, byte[])}
+     * @hide
+     */
+    @IntDef(prefix = "EMULATE_NFC_A_TAG_STATUS_", value = {
+            EMULATE_NFC_A_TAG_STATUS_OK,
+            EMULATE_NFC_A_TAG_STATUS_FAILED_NFC_NOT_ENABLED,
+            EMULATE_NFC_A_TAG_STATUS_FAILED_INTERNAL
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface EmulateNfcATagStatusCode {}
+
+    /**
+     * Emulate NFC Technology A tag with the provided params.
+     *
+     * If you enable any type other than type 4, then enabling this functionality disables all the
+     * regularly registered CE services via {@link android.nfc.cardemulation.HostApduService} and
+     * {@link android.nfc.cardemulation.OffHostApduService} services on the device.
+     *
+     * @param enable whether to enable or disable the card emulation with custom parameters.
+     * @param bitFrameSdd value is defined in "NFCForum-TS-NCI section 6.1.9" and to be sent
+     *                    in Byte 1 of SENS_RES as defined in "NFCForum-TS-DIGITAL section 6.6.3".
+     * @param platformConfig value is defined in "NFCForum-TS-NCI section 6.1.9" and to be sent in
+     *                       Byte 2 of SENS_RES as defined in "NFCForum-TS-DIGITAL section 6.6.3".
+     * @param selInfo value is defined in "NFCForum-TS-NCI section 6.1.9". It is used to
+     *                generate SEL_RES as defined in "NFCForum-TS-DIGITAL section 6.6.3".
+     * @param nfcid1 value 1s defined in "NFCForum-TS-NCI section 6.1.9". Only 4, 7, or 10 bytes
+     *               data will be accepted..
+     * @param rats RATS Response Interface Byte TB(1) as defined in "NFCForum-TS-DIGITAL section
+     *             14.6".
+     * @param histBytes Historical Bytes (only applicable for Type 4A Tag) as defined in
+     *                  "NFCForum-TS-DIGITAL section 14.6". Should be no more than 15 bytes.
+     */
+    @EmulateNfcATagStatusCode
+    @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_OEM_EXTENSION_25Q4)
+    @SuppressLint("NoByteOrShort")
+    public int emulateNfcTechnologyATag(boolean enable, byte bitFrameSdd, byte platformConfig,
+            byte selInfo, @NonNull byte[] nfcid1, byte rats, @Nullable byte[] histBytes) {
+        int rslt = NfcAdapter.callServiceReturn(
+                () -> NfcAdapter.sService.emulateNfcATag(enable, bitFrameSdd, platformConfig,
+                        selInfo, nfcid1, rats, histBytes),
+                EMULATE_NFC_A_TAG_STATUS_OK);
+
+        return rslt;
     }
 
     /** @hide */
@@ -1159,8 +1230,6 @@ public final class NfcOemExtension {
                     try {
                         ex.execute(() -> cb.onNdefMessage(
                                 tag, message, new ReceiverWrapper<>(hasOemExecutableContent)));
-                    } catch (RuntimeException exception) {
-                        throw exception;
                     } finally {
                         Binder.restoreCallingIdentity(identity);
                     }
@@ -1173,26 +1242,44 @@ public final class NfcOemExtension {
                                                   List<ApduServiceInfo> services,
                                                   ComponentName failedComponent, String category)
                 throws RemoteException {
-            mCallbackMap.forEach((cb, ex) -> {
-                synchronized (mLock) {
-                    final long identity = Binder.clearCallingIdentity();
-                    try {
-                        ex.execute(() -> cb.onLaunchHceAppChooserActivity(
-                                selectedAid, services, failedComponent, category));
-                    } catch (RuntimeException exception) {
-                        throw exception;
-                    } finally {
-                        Binder.restoreCallingIdentity(identity);
+            try {
+                mCallbackMap.forEach((cb, ex) -> {
+                    synchronized (mLock) {
+                        final long identity = Binder.clearCallingIdentity();
+                        try {
+                            ex.execute(() -> cb.onLaunchHceAppChooserActivity(
+                                    selectedAid, services, failedComponent, category));
+                        } finally {
+                            Binder.restoreCallingIdentity(identity);
+                        }
                     }
-                }
-            });
+                });
+            } catch (UnsupportedOperationException exception) {
+                // This allows the NFC stack to default to the AOSP implementation of the
+                // HCE app chooser activity.
+                throw new RemoteException(exception.getMessage());
+            }
         }
 
         @Override
         public void onLaunchHceTapAgainActivity(ApduServiceInfo service, String category)
                 throws RemoteException {
-            mCallbackMap.forEach((cb, ex) ->
-                    handleVoid2ArgCallback(service, category, cb::onLaunchHceTapAgainDialog, ex));
+            try {
+                mCallbackMap.forEach((cb, ex) -> {
+                    synchronized (mLock) {
+                        final long identity = Binder.clearCallingIdentity();
+                        try {
+                            ex.execute(() -> cb.onLaunchHceTapAgainDialog(service, category));
+                        } finally {
+                            Binder.restoreCallingIdentity(identity);
+                        }
+                    }
+                });
+            } catch (UnsupportedOperationException exception) {
+                // This allows the NFC stack to default to the AOSP implementation of the
+                // HCE tap again activity.
+                throw new RemoteException(exception.getMessage());
+            }
         }
 
         @Override
@@ -1216,8 +1303,6 @@ public final class NfcOemExtension {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callbackMethod.accept(input));
-                } catch (RuntimeException ex) {
-                    throw ex;
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
@@ -1230,8 +1315,6 @@ public final class NfcOemExtension {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     executor.execute(() -> callbackMethod.accept(input1, input2));
-                } catch (RuntimeException ex) {
-                    throw ex;
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }

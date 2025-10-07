@@ -1309,7 +1309,7 @@ public final class NfcAdapter {
      * @throws IllegalStateException If a transient failure related to current device state
      * prevented power-saving mode from being set.
      */
-    @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
+    @RequiresPermission(Manifest.permission.NFC_SET_CONTROLLER_ALWAYS_ON)
     @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFC_POWER_SAVING_MODE)
     public void setPowerSavingMode(boolean enabled) {
         callService(() -> sService.setPowerSavingMode(enabled));
@@ -1903,14 +1903,12 @@ public final class NfcAdapter {
                 throw new UnsupportedOperationException();
             }
         }
-        /*
-         * Allow priv apps to pass null in activity.
-         */
+        // Allow priv apps to pass null in activity.
         if (activity == null
                 || (pollTechnology & FLAG_SET_DEFAULT_TECH) == FLAG_SET_DEFAULT_TECH
                 || (listenTechnology & FLAG_SET_DEFAULT_TECH) == FLAG_SET_DEFAULT_TECH) {
             Binder token = new Binder();
-            callService( () ->
+            callService(() ->
                     sService.updateDiscoveryTechnology(
                             token, pollTechnology, listenTechnology, mContext.getPackageName()));
         } else {
@@ -1927,7 +1925,16 @@ public final class NfcAdapter {
 
     @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
     public void resetDiscoveryTechnology(@NonNull Activity activity) {
-        mNfcActivityManager.resetDiscoveryTech(activity);
+        // Allow priv apps to pass null in activity.
+        if (activity == null) {
+            Binder token = new Binder();
+            callService(() ->
+                    sService.updateDiscoveryTechnology(
+                            token, NfcAdapter.FLAG_USE_ALL_TECH, NfcAdapter.FLAG_USE_ALL_TECH,
+                            mContext.getPackageName()));
+        } else {
+            mNfcActivityManager.resetDiscoveryTech(activity);
+        }
     }
 
     /**
