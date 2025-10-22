@@ -784,4 +784,9 @@ public class NativeNfcManager implements DeviceHost {
     public void onRestartRfDiscovery() {
         mListener.onRestartRfDiscovery();
     }
+
+    // TZ secure zone notification reported from HAL to Disable NFC
+    private void notifyTZNfcSecureZoneReported() {
+        mListener.onTZNfcSecureZoneReported();
+    }
 }
