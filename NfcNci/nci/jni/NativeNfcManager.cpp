@@ -1478,8 +1478,7 @@ static jboolean nfcManager_setObserveMode(JNIEnv* e, jobject o,
       static_cast<uint8_t>(
           enable != JNI_FALSE
               ? (NCI_ANDROID_PASSIVE_OBSERVE_PARAM_ENABLE_A |
-                           NCI_ANDROID_PASSIVE_OBSERVE_PARAM_ENABLE_B |
-                           NCI_ANDROID_PASSIVE_OBSERVE_PARAM_ENABLE_V)
+                           NCI_ANDROID_PASSIVE_OBSERVE_PARAM_ENABLE_B)
               : NCI_ANDROID_PASSIVE_OBSERVE_PARAM_DISABLE)};
   {
     SyncEventGuard guard(gNfaVsCommand);
@@ -3174,12 +3173,14 @@ static tNFA_STATUS stopPolling_rfDiscoveryDisabled() {
   SyncEventGuard guard(sNfaEnableDisablePollingEvent);
   LOG(DEBUG) << StringPrintf("%s: disable polling", __func__);
   stat = NFA_DisablePolling();
-  if (stat == NFA_STATUS_OK) {
-    sPollingEnabled = false;
-    sNfaEnableDisablePollingEvent.wait();  // wait for NFA_POLL_DISABLED_EVT
-  } else {
-    LOG(ERROR) << StringPrintf("%s: fail disable polling; error=0x%X", __func__,
-                               stat);
+  if (!sIsRecovering) {
+    if (stat == NFA_STATUS_OK) {
+      sPollingEnabled = false;
+      sNfaEnableDisablePollingEvent.wait();  // wait for NFA_POLL_DISABLED_EVT
+    } else {
+      LOG(ERROR) << StringPrintf("%s: fail disable polling; error=0x%X",
+                                 __func__, stat);
+    }
   }
   nativeNfcTag_releaseRfInterfaceMutexLock();
 

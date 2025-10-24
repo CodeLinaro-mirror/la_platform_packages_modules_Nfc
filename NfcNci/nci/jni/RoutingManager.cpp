@@ -242,6 +242,7 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
     LOG(ERROR) << fn << ": Failed to register wildcard AID for DH";
 
   // Trigger RT update
+  mNfceeListenConfig.nb_config = 0;
   setEeInfoChangedFlag();
   mDefaultAidRouteAdded = false;
 
@@ -980,7 +981,8 @@ void RoutingManager::updateDefaultRoute() {
   SyncEventGuard guard(mRoutingEvent);
   tNFA_STATUS nfaStat = NFA_EeAddSystemCodeRouting(
       mDefaultSysCode, mDefaultSysCodeRoute,
-      mSecureNfcEnabled ? 0x01 : mDefaultSysCodePowerstate);
+      mSecureNfcEnabled ? (mDefaultSysCodePowerstate & 0x01)
+                        : mDefaultSysCodePowerstate);
   if (sIsRecovering) return;
   if (nfaStat == NFA_STATUS_NOT_SUPPORTED) {
     mIsScbrSupported = false;
@@ -1040,6 +1042,42 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateTechnologyABFRoute(int route,
   mDefaultFelicaRoute = felicaRoute;
   mDefaultOffHostRoute = route;
   return mSeTechMask;
+}
+
+/*******************************************************************************
+**
+** Function:        checkUiccListenConfigNeeded
+**
+** Description:     Check and update UICC listen configuration
+**
+** Returns:         None
+**
+*******************************************************************************/
+bool RoutingManager::checkUiccListenConfigNeeded(
+    tNFA_HANDLE eeHandle, tNFA_TECHNOLOGY_MASK seTechMask) {
+  static const char fn[] = "RoutingManager::checkUiccListenConfigNeeded";
+  LOG(DEBUG) << StringPrintf("%s: ee_handle=0x%04x, seTechMask=0x%02x", fn,
+                             eeHandle, seTechMask);
+
+  bool found = false, config = false;
+  for (int j = 0; j < mNfceeListenConfig.nb_config; j++) {
+    if (mNfceeListenConfig.config[j].nfcee_id == eeHandle) {
+      found = true;
+      if (mNfceeListenConfig.config[j].tech_mask != seTechMask) {
+        mNfceeListenConfig.config[j].tech_mask = seTechMask;
+        config = true;
+        break;
+      }
+    }
+  }
+  if (!found) {
+    mNfceeListenConfig.config[mNfceeListenConfig.nb_config].nfcee_id = eeHandle;
+    mNfceeListenConfig.config[mNfceeListenConfig.nb_config].tech_mask =
+        seTechMask;
+    mNfceeListenConfig.nb_config++;
+    config = true;
+  }
+  return config;
 }
 
 /*******************************************************************************
@@ -1109,9 +1147,11 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
           "%s: Configuring tech mask 0x%02x on EE 0x%04x", fn, seTechMask,
           eeHandle);
 
-      nfaStat = NFA_CeConfigureUiccListenTech(eeHandle, seTechMask);
-      if (nfaStat != NFA_STATUS_OK)
-        LOG(ERROR) << fn << ": Failed to configure UICC listen technologies.";
+      if (checkUiccListenConfigNeeded(eeHandle, seTechMask)) {
+        nfaStat = NFA_CeConfigureUiccListenTech(eeHandle, seTechMask);
+        if (nfaStat != NFA_STATUS_OK)
+          LOG(ERROR) << fn << ": Failed to configure UICC listen technologies.";
+      }
 
       nfaStat = NFA_EeSetDefaultTechRouting(
           eeHandle, seTechMask, mSecureNfcEnabled ? 0 : seTechMask, 0,

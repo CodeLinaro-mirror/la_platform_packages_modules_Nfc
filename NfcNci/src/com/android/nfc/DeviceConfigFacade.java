@@ -72,6 +72,7 @@ public class DeviceConfigFacade {
     private int mCeWakeLockTimeoutMillis;
     private String[] mOverwriteRoutingTableAllowListPkgs;
     private boolean mDefaultPreferredSubscriptionToUicc;
+    private boolean mSeparateOffhostFelicaRouting;
 
     private static DeviceConfigFacade sInstance;
     public static DeviceConfigFacade getInstance(Context context, Handler handler) {
@@ -206,6 +207,9 @@ public class DeviceConfigFacade {
         mDefaultPreferredSubscriptionToUicc = DeviceConfig.getBoolean(DEVICE_CONFIG_NAMESPACE_NFC,
                 "default_preferred_subscription_to_uicc",
                 mContext.getResources().getBoolean(R.bool.default_preferred_subscription_to_uicc));
+        mSeparateOffhostFelicaRouting = DeviceConfig.getBoolean(
+                DEVICE_CONFIG_NAMESPACE_NFC, "separate_offhost_felica_routing",
+                mContext.getResources().getBoolean(R.bool.separate_offhost_felica_routing));
     }
 
     private boolean isSecureNfcCapableDefault() {
@@ -256,6 +260,12 @@ public class DeviceConfigFacade {
     public boolean getIndicateUserActivityForHce() { return mIndicateUserActivityForHce; }
     public boolean shouldDefaultPreferredSubscriptionToUicc() {
         return mDefaultPreferredSubscriptionToUicc;
+    }
+    /**
+     * Checks separate_offhost_felica_routing overlay value
+     */
+    public boolean shouldSeparateOffhostFelicaRouting() {
+        return mSeparateOffhostFelicaRouting;
     }
     public String getDefaultRoute() {
         return mDefaultRoute;

@@ -38,6 +38,7 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.nfc.NfcService;
+import com.android.nfc.R;
 import com.android.nfc.cardemulation.util.TelephonyUtils;
 
 import java.io.FileDescriptor;
@@ -453,7 +454,9 @@ public class RegisteredAidCache {
 
         // [nfc_w_temp] Implement eSIM
         List<ServiceAidInfo> filteredServices;
-        if (mPreferredSimType == TelephonyUtils.SIM_TYPE_UNKNOWN) {
+        boolean telephonySubscriptionEnabled = mContext.getResources().getBoolean(
+                R.bool.telephony_subscription_routing_enabled);
+        if (telephonySubscriptionEnabled && mPreferredSimType == TelephonyUtils.SIM_TYPE_UNKNOWN) {
             if (DBG) {
                 Log.i(TAG, "resolveAidConflictLocked: Sim based service is removed "
                         + "due to unknown sim type");
@@ -1514,6 +1517,20 @@ public class RegisteredAidCache {
     @NonNull
     public ComponentNameAndUser getPreferredPaymentService() {
          return new ComponentNameAndUser(mUserIdPreferredPaymentService, mPreferredPaymentService);
+    }
+
+    @NonNull
+    public List<ComponentNameAndUser> getPreferredPaymentAssociatedServices() {
+        List<ComponentNameAndUser> associatedServices = new ArrayList<>();
+        if (mAssociatedRoleServices != null) {
+            for (ApduServiceInfo service : mAssociatedRoleServices) {
+                associatedServices.add(
+                        new ComponentNameAndUser(
+                                UserHandle.getUserHandleForUid(service.getUid()).getIdentifier(),
+                                service.getComponent()));
+            }
+        }
+        return associatedServices;
     }
 
     public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
