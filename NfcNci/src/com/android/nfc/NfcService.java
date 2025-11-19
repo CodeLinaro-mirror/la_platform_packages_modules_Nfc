@@ -26,7 +26,7 @@ import static android.nfc.OemLogItems.EVENT_ENABLE;
 
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_LOCKED;
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
-import static com.android.nfc.module.flags.Flags.coalesceRfFieldOnOffBroadcasts;
+import static com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts;
 
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
@@ -75,6 +75,7 @@ import android.nfc.INfcTag;
 import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcVendorNciCallback;
 import android.nfc.INfcWlcStateListener;
+import android.nfc.IReaderCallback;
 import android.nfc.IT4tNdefNfcee;
 import android.nfc.ITagRemovedCallback;
 import android.nfc.NdefMessage;
@@ -195,6 +196,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     public static final String PREF = "NfcServicePrefs";
     public static final String PREF_TAG_APP_LIST = "TagIntentAppPreferenceListPrefs";
 
+    public static final String GESTURE_EXCHAGE_AID = "A00000047609";
     static final String PREF_NFC_ON = "nfc_on";
 
     static final String PREF_NFC_READER_OPTION_ON = "nfc_reader_on";
@@ -571,8 +573,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private final StatsdUtils mStatsdUtils;
     private final boolean mCheckDisplayStateForScreenState;
 
-    private  INfcVendorNciCallback mNfcVendorNciCallBack = null;
-    private  INfcOemExtensionCallback mNfcOemExtensionCallback = null;
+    private INfcVendorNciCallback mNfcVendorNciCallBack = null;
+    private INfcOemExtensionCallback mNfcOemExtensionCallback = null;
+    private IReaderCallback mNfcGestureExchangeCallback = null;
 
     private final DisplayListener mDisplayListener = new DisplayListener() {
         @Override
@@ -3701,6 +3704,34 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mNfcDispatcher.setOemExtension(mNfcOemExtensionCallback);
             }
         }
+
+        @Override
+        public void registerGestureExchangeCallback(IReaderCallback callback)
+                throws RemoteException {
+            synchronized (NfcService.this) {
+                if (DBG) Log.i(TAG, "registerGestureExchangeCallback");
+                NfcPermissions.enforceGestureExchangePermissions(mContext);
+                mNfcGestureExchangeCallback = callback;
+                //mDeviceHost.enableGestureExchangeAid(true);
+            }
+        }
+
+        @Override
+        public void unregisterGestureExchangeCallback(IReaderCallback callback)
+                throws RemoteException {
+            synchronized (NfcService.this) {
+                if (DBG) Log.i(TAG, "unregisterGestureExchangeCallback");
+                NfcPermissions.enforceGestureExchangePermissions(mContext);
+                mNfcGestureExchangeCallback = null;
+                //mDeviceHost.enableGestureExchangeAid(false);
+            }
+        }
+
+        @Override
+        public String getGestureExchangeAid() throws RemoteException {
+            return GESTURE_EXCHAGE_AID;
+        }
+
         @Override
         public Map<String, Integer> fetchActiveNfceeList() throws RemoteException {
             Map<String, Integer> map = new HashMap<String, Integer>();
@@ -4947,6 +4978,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             // If there are some tags connected, we need to execute the callback to indicate
             // the tag is being forcibly disconnected.
             executeOemOnTagConnectedCallback(false);
+            executeReaderModeOnTagLostCallback();
         }
         for (Object object : objectValues) {
             if (object instanceof TagEndpoint) {
@@ -5352,6 +5384,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                     mCookieUpToDate = -1;
                                     clearAppInactivityDetectionContext();
                                     executeOemOnTagConnectedCallback(false);
+                                    executeReaderModeOnTagLostCallback();
                                     applyRouting(false);
                                 }
                             };
@@ -5410,6 +5443,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             tag.disconnect();
                             if (DBG) Log.d(TAG, "handleMessage: Read NDEF error");
                             executeOemOnTagConnectedCallback(false);
+                            executeReaderModeOnTagLostCallback();
                             if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
                                 if (mReadErrorCount < mReadErrorCountMax) {
                                     mReadErrorCount++;
@@ -6027,6 +6061,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         && !isEndPointRemovalDetectionSupported()) {
                     if (DBG) Log.d(TAG, "dispatchTagEndpoint: Tag dispatch failed");
                     executeOemOnTagConnectedCallback(false);
+                    executeReaderModeOnTagLostCallback();
                     unregisterObject(tagEndpoint.getHandle());
                     if (mPollDelayTime > NO_POLL_DELAY) {
                         pollingDelay();
@@ -6085,6 +6120,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         if (mNfcOemExtensionCallback != null) {
             try {
                 mNfcOemExtensionCallback.onTagConnected(connected);
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString());
+            }
+        }
+    }
+
+    private void executeReaderModeOnTagLostCallback() {
+        if (mReaderModeParams != null && mReaderModeParams.callback != null) {
+            try {
+                Log.e(TAG, "[Jack] executeReaderModeOnTagLostCallback - onTagLost");
+                mReaderModeParams.callback.onTagLost();
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
