@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.android.nfc;
 
 import static android.nfc.NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED;
@@ -114,7 +115,6 @@ import android.os.UserManager;
 import android.os.test.TestLooper;
 import android.platform.test.annotations.DisableFlags;
 import android.platform.test.annotations.EnableFlags;
-import android.platform.test.annotations.RequiresFlagsEnabled;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.platform.test.flag.junit.SetFlagsRule;
@@ -610,9 +610,9 @@ public final class NfcServiceTest {
         Assert.assertNull(mNfcService.mSoundPool);
     }
 
-    @EnableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testMsg_Rf_Field_Activated() {
+        Assume.assumeTrue(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_RF_FIELD_ACTIVATED);
@@ -637,9 +637,9 @@ public final class NfcServiceTest {
         Assert.assertEquals(NfcAdapter.ACTION_REQUIRE_UNLOCK_FOR_NFC, intent.getAction());
     }
 
-    @DisableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testMsg_Rf_Field_Activated_withBroadcastCoalescingDisabled() {
+        Assume.assumeFalse(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_RF_FIELD_ACTIVATED);
@@ -661,9 +661,9 @@ public final class NfcServiceTest {
         Assert.assertEquals(NfcAdapter.ACTION_REQUIRE_UNLOCK_FOR_NFC, intent.getAction());
     }
 
-    @EnableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testMsg_Rf_Field_Deactivated() {
+        Assume.assumeTrue(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_RF_FIELD_DEACTIVATED);
@@ -682,9 +682,9 @@ public final class NfcServiceTest {
         Assert.assertEquals(RF_FIELD_ON_OFF_BROADCAST_OPTIONS, bundle);
     }
 
-    @DisableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testMsg_Rf_Field_Deactivated_withBroadcastCoalescingDisabled() {
+        Assume.assumeFalse(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_RF_FIELD_DEACTIVATED);
@@ -891,8 +891,12 @@ public final class NfcServiceTest {
     }
 
     @Test
-    public void testDirectBootAware() throws Exception {
+    public void testDirectBootAware_migrationForUser0() throws Exception {
         when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        // Ensure migration is not marked as complete
+        when(mPreferences.getBoolean(eq(NfcService.PREF_MIGRATE_TO_DE_COMPLETE), anyBoolean()))
+                .thenReturn(false);
+
         mNfcService = new NfcService(mApplication, mNfcInjector);
         mLooper.dispatchAll();
         verify(mNfcInjector).makeDeviceHost(mDeviceHostListener.capture());
@@ -905,22 +909,81 @@ public final class NfcServiceTest {
         Context ceContext = mock(Context.class);
         when(mApplication.createCredentialProtectedStorageContext()).thenReturn(ceContext);
         when(ceContext.getSharedPreferences(anyString(), anyInt())).thenReturn(mPreferences);
-        doAnswer(new Answer() {
-            @Override
-            public Map<String, ?> answer(InvocationOnMock invocation) throws Throwable {
-                Map<String, Object> prefMap = Map.of(PREF_NFC_ON, true);
-                return prefMap;
-            }
+        doAnswer((Answer<Map<String, ?>>) invocation -> {
+            Map<String, Object> prefMap = Map.of(PREF_NFC_ON, true);
+            return prefMap;
         }).when(mPreferences).getAll();
         when(mApplication.moveSharedPreferencesFrom(ceContext, NfcService.PREF)).thenReturn(true);
         when(mApplication.moveSharedPreferencesFrom(ceContext, NfcService.PREF_TAG_APP_LIST))
-            .thenReturn(true);
-        mGlobalReceiver.getValue().onReceive(mApplication, new Intent(Intent.ACTION_USER_UNLOCKED));
+                .thenReturn(true);
+
+        // Create an intent for the primary user (user 0)
+        Intent intent = new Intent(Intent.ACTION_USER_UNLOCKED);
+        intent.putExtra(Intent.EXTRA_USER_HANDLE, 0);
+        mGlobalReceiver.getValue().onReceive(mApplication, intent);
+
+        // Verify that migration logic was triggered
         verify(mApplication).moveSharedPreferencesFrom(ceContext, NfcService.PREF);
         verify(mApplication).getSharedPreferences(eq(NfcService.PREF), anyInt());
         verify(mPreferences).edit();
         verify(mPreferencesEditor).putBoolean(NfcService.PREF_MIGRATE_TO_DE_COMPLETE, true);
         verify(mPreferencesEditor).apply();
+    }
+
+    @Test
+    public void testDirectBootAware_noMigrationForSecondaryUser() throws Exception {
+        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        // Ensure migration is not marked as complete
+        when(mPreferences.getBoolean(eq(NfcService.PREF_MIGRATE_TO_DE_COMPLETE), anyBoolean()))
+                .thenReturn(false);
+
+        mNfcService = new NfcService(mApplication, mNfcInjector);
+        mLooper.dispatchAll();
+        verify(mNfcInjector).makeDeviceHost(mDeviceHostListener.capture());
+        verify(mApplication).registerReceiverForAllUsers(
+                mGlobalReceiver.capture(),
+                argThat(intent -> intent.hasAction(Intent.ACTION_USER_UNLOCKED)), any(), any());
+        verify(mDeviceHost).initialize();
+
+        clearInvocations(mApplication, mPreferences, mPreferencesEditor);
+
+        // Create an intent for a secondary user
+        Intent intent = new Intent(Intent.ACTION_USER_UNLOCKED);
+        intent.putExtra(Intent.EXTRA_USER_HANDLE, 10); // Non-primary user
+        mGlobalReceiver.getValue().onReceive(mApplication, intent);
+
+        // Verify migration logic is NOT triggered
+        verify(mApplication, never()).moveSharedPreferencesFrom(any(), anyString());
+        verify(mPreferencesEditor, never()).putBoolean(
+                eq(NfcService.PREF_MIGRATE_TO_DE_COMPLETE), anyBoolean());
+    }
+
+    @Test
+    public void testDirectBootAware_migrationSkippedIfComplete() throws Exception {
+        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        // Setup: migration is already complete
+        when(mPreferences.getBoolean(eq(NfcService.PREF_MIGRATE_TO_DE_COMPLETE), anyBoolean()))
+                .thenReturn(true);
+
+        mNfcService = new NfcService(mApplication, mNfcInjector);
+        mLooper.dispatchAll();
+        verify(mNfcInjector).makeDeviceHost(mDeviceHostListener.capture());
+        verify(mApplication).registerReceiverForAllUsers(
+                mGlobalReceiver.capture(),
+                argThat(intent -> intent.hasAction(Intent.ACTION_USER_UNLOCKED)), any(), any());
+        verify(mDeviceHost).initialize();
+
+        clearInvocations(mApplication, mPreferences, mPreferencesEditor);
+
+        // Create an intent for the primary user
+        Intent intent = new Intent(Intent.ACTION_USER_UNLOCKED);
+        intent.putExtra(Intent.EXTRA_USER_HANDLE, 0);
+        mGlobalReceiver.getValue().onReceive(mApplication, intent);
+
+        // Verify migration logic is NOT triggered
+        verify(mApplication, never()).moveSharedPreferencesFrom(any(), anyString());
+        verify(mPreferencesEditor, never()).putBoolean(
+                eq(NfcService.PREF_MIGRATE_TO_DE_COMPLETE), anyBoolean());
     }
 
     @Test
@@ -1379,7 +1442,7 @@ public final class NfcServiceTest {
         verify(tagEndpoint).startPresenceChecking(anyInt(), any());
     }
 
-    @EnableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
+    @EnableFlags(com.android.nfc.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testOnRemoteFieldActivated() throws RemoteException {
         createNfcServiceWithoutStatsdUtils();
@@ -1403,10 +1466,10 @@ public final class NfcServiceTest {
         verify(mNfcEventLog, atLeast(2)).logEvent(any());
     }
 
-    @DisableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testOnRemoteFieldActivated_withBroadcastCoalesciingDisabled()
             throws RemoteException {
+        Assume.assumeFalse(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         createNfcServiceWithoutStatsdUtils();
         List<String> userlist = new ArrayList<>();
         userlist.add("com.android.nfc");
@@ -1428,9 +1491,9 @@ public final class NfcServiceTest {
         verify(mNfcEventLog, atLeast(2)).logEvent(any());
     }
 
-    @EnableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testOnRemoteFieldDeactivated() throws RemoteException {
+        Assume.assumeTrue(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         createNfcServiceWithoutStatsdUtils();
         List<String> userlist = new ArrayList<>();
         userlist.add("com.android.nfc");
@@ -1452,10 +1515,10 @@ public final class NfcServiceTest {
         verify(mNfcEventLog, atLeast(2)).logEvent(any());
     }
 
-    @DisableFlags(com.android.nfc.module.flags.Flags.FLAG_COALESCE_RF_FIELD_ON_OFF_BROADCASTS)
     @Test
     public void testOnRemoteFieldDeactivated_withBroadcastCoalesciingDisabled()
             throws RemoteException {
+        Assume.assumeFalse(com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts());
         createNfcServiceWithoutStatsdUtils();
         List<String> userlist = new ArrayList<>();
         userlist.add("com.android.nfc");
@@ -1478,7 +1541,6 @@ public final class NfcServiceTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(Flags.FLAG_COALESCE_RF_EVENTS)
     public void testOnRemoteFieldCoalessing() throws RemoteException {
         Assume.assumeTrue(Flags.coalesceRfEvents());
         createNfcServiceWithoutStatsdUtils();

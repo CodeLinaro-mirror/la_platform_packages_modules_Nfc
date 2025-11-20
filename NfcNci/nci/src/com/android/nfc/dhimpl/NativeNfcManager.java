@@ -165,7 +165,7 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public boolean isPowerSavingModeSupported() {
-        return mProprietaryCaps.isPowerSavingModeSupported();
+        return mProprietaryCaps != null && mProprietaryCaps.isPowerSavingModeSupported();
     }
 
     private native boolean doSetPowerSavingMode(boolean flag);
