@@ -1072,6 +1072,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public IBinder binder;
         public int uid;
         public byte[] annotation;
+        public byte[] extra_annotation;
     }
 
     final class DiscoveryTechParams {
@@ -3329,9 +3330,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         : DEFAULT_PRESENCE_CHECK_DELAY;
                 mReaderModeParams.binder = binder;
                 mReaderModeParams.uid = uid;
-                mReaderModeParams.annotation = extras == null ? null
-                        : extras.getByteArray(
-                            NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION);
+                mReaderModeParams.annotation = extras == null ? null : extras.getByteArray(
+                        NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION);
+                mReaderModeParams.extra_annotation = extras == null ? null : extras.getByteArray(
+                        NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION_VENDOR_EXTENSION);
             }
         }
 
@@ -4913,6 +4915,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
         if (mReaderModeParams != null && mReaderModeParams.annotation != null) {
             paramsBuilder.setTechAPollingLoopAnnotation(mReaderModeParams.annotation);
+        }
+        if (mReaderModeParams != null && mReaderModeParams.extra_annotation != null) {
+            paramsBuilder.setExtraAnnotation(mReaderModeParams.extra_annotation);
         }
         if (mIsHceCapable) {
             // Host routing is always enabled, provided we aren't in reader mode
