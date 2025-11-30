@@ -26,7 +26,7 @@ import static android.nfc.OemLogItems.EVENT_ENABLE;
 
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_LOCKED;
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
-import static com.android.nfc.flags.Flags.coalesceRfFieldOnOffBroadcasts;
+import static com.android.nfc.module.nonexported.flags.Flags.coalesceRfFieldOnOffBroadcasts;
 
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
@@ -598,6 +598,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private boolean mRfFieldActivated = false;
     private boolean mRfDiscoveryStarted = false;
     private boolean mEeListenActivated = false;
+    private boolean mTagConnected = false;
     // Scheduled executor for routing table update
     private final ScheduledExecutorService mRtUpdateScheduler = Executors.newScheduledThreadPool(1);
     private ScheduledFuture<?> mRtUpdateScheduledTask = null;
@@ -1072,6 +1073,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public IBinder binder;
         public int uid;
         public byte[] annotation;
+        public byte[] extra_annotation;
     }
 
     final class DiscoveryTechParams {
@@ -1920,7 +1922,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             WatchDogThread watchDog = new WatchDogThread("enableInternal", INIT_WATCHDOG_MS);
             watchDog.start();
 
-            mCardEmulationManager.updateForDefaultSwpToEuicc();
+            if (mIsHceCapable) {
+                mCardEmulationManager.updateForDefaultSwpToEuicc();
+            }
             try {
                 mRoutingWakeLock.acquire();
                 try {
@@ -3329,9 +3333,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         : DEFAULT_PRESENCE_CHECK_DELAY;
                 mReaderModeParams.binder = binder;
                 mReaderModeParams.uid = uid;
-                mReaderModeParams.annotation = extras == null ? null
-                        : extras.getByteArray(
-                            NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION);
+                mReaderModeParams.annotation = extras == null ? null : extras.getByteArray(
+                        NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION);
+                mReaderModeParams.extra_annotation = extras == null ? null : extras.getByteArray(
+                        NfcAdapter.EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION_VENDOR_EXTENSION);
             }
         }
 
@@ -3943,6 +3948,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mNfcOemExtensionCallback.onRfFieldDetected(mRfFieldActivated);
                     mNfcOemExtensionCallback.onRfDiscoveryStarted(mRfDiscoveryStarted);
                     mNfcOemExtensionCallback.onEeListenActivated(mEeListenActivated);
+                    mNfcOemExtensionCallback.onTagConnected(mTagConnected);
                 } catch (RemoteException e) {
                     Log.e(TAG, "updateNfCState: Failed to update, e=", e);
                 }
@@ -4913,6 +4919,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
         if (mReaderModeParams != null && mReaderModeParams.annotation != null) {
             paramsBuilder.setTechAPollingLoopAnnotation(mReaderModeParams.annotation);
+        }
+        if (mReaderModeParams != null && mReaderModeParams.extra_annotation != null) {
+            paramsBuilder.setExtraAnnotation(mReaderModeParams.extra_annotation);
         }
         if (mIsHceCapable) {
             // Host routing is always enabled, provided we aren't in reader mode
@@ -6117,6 +6126,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     private void executeOemOnTagConnectedCallback(boolean connected) {
+        mTagConnected = connected;
         if (mNfcOemExtensionCallback != null) {
             try {
                 mNfcOemExtensionCallback.onTagConnected(connected);

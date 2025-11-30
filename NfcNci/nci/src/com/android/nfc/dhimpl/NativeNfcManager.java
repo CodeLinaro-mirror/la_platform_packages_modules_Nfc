@@ -367,6 +367,7 @@ public class NativeNfcManager implements DeviceHost {
             boolean enableReaderMode,
             boolean enableHostRouting,
             byte[] techAPollingLoopAnnotation,
+            byte[] extraAnnotation,
             boolean restart);
 
 
@@ -378,6 +379,7 @@ public class NativeNfcManager implements DeviceHost {
                 params.shouldEnableReaderMode(),
                 params.shouldEnableHostRouting(),
                 params.techAPollingLoopAnnotation(),
+                params.extraAnnotation(),
                 restart);
     }
 
