@@ -1,4 +1,4 @@
-// Copyright (C) 2025 The Android Open Source Project
+// Copyright (C) 2018 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,30 +17,16 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-python_defaults {
-    name: "NfcExitFrameMultiDevicePythonDefaults",
-    libs: [
-        "mobly",
-        "pn532-python",
-        "platform-test-py-annotations",
-    ],
+android_test_helper_app {
+    name: "WalletRoleHolderApp2",
+    defaults: ["cts_support_defaults"],
+    srcs: ["**/*.java"],
+    // Tag this module as a cts test artifact
     test_suites: [
+        "cts",
         "general-tests",
+        "sts",
     ],
-}
-
-python_test_host {
-    name: "NfcExitFrameMultiDeviceTestCases",
-    main: "nfc_exit_frame_multi_device_test.py",
-    srcs: ["nfc_exit_frame_multi_device_test.py"],
-    test_config: "AndroidTest.xml",
-    device_common_data: [
-        ":NfcEmulatorTestApp",
-        "config.yaml",
-    ],
-    test_options: {
-        unit_test: false,
-        runner: "mobly",
-    },
-    defaults: ["NfcExitFrameMultiDevicePythonDefaults"],
+    sdk_version: "current",
+    min_sdk_version: "36",
 }

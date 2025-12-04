@@ -43,6 +43,7 @@ import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
 import android.nfc.cardemulation.PollingFrame.PollingFrameType;
+import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -2336,6 +2337,41 @@ public class CardEmulationTest {
         });
     }
 
+    @RequiresFlagsEnabled({android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED,
+            android.nfc.Flags.FLAG_NFC_ASSOCIATED_ROLE_SERVICES})
+    @Test
+    public void testAidResolutionWithRoleHolder_associatedService_withPackageName()
+            throws NoSuchFieldException {
+        assumeTrue(Build.VERSION.SDK_INT > Build.VERSION_CODES.BAKLAVA);
+        runWithRole(mContext, WalletRoleTestUtils.WALLET_HOLDER2_PACKAGE_NAME, ()-> {
+            /*
+             * Aid Mapping:
+             * Wallet Holder App: Service 1:     PAYMENT_AID_1, PAYMENT_AID_2
+             * Wallet Holder App: Service 2:     PAYMENT_AID_1, PAYMENT_AID_2
+             * Foreground App :   Associated Service:  PAYMENT_AID_3
+             *
+             * Scenario:
+             * Wallet Role Holder is WalletRoleHolderApp
+             * Associated app: ForegroundApp
+             *
+             * Expected Outcome:
+             * Associated Service should be the default service for the PAYMENT_AID_3.
+             * The Wallet Holder app should still be default for PAYMENT_AID_1 and
+             * PAYMENT_AID_2.
+             **/
+            CardEmulation instance = CardEmulation.getInstance(mAdapter);
+            assertTrue(instance.isDefaultServiceForAid(
+                    WalletRoleTestUtils.getWalletRoleHolder2Service(),
+                    WalletRoleTestUtils.PAYMENT_AID_1));
+            assertTrue(instance.isDefaultServiceForAid(
+                    WalletRoleTestUtils.getWalletRoleHolder2Service(),
+                    WalletRoleTestUtils.PAYMENT_AID_2));
+            assertTrue(instance.isDefaultServiceForAid(
+                    WalletRoleTestUtils.getAssociatedService(),
+                    WalletRoleTestUtils.PAYMENT_AID_3));
+        });
+    }
+
     @RequiresFlagsEnabled(android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED)
     @RequiresFlagsDisabled(android.nfc.Flags.FLAG_NFC_ASSOCIATED_ROLE_SERVICES)
     @Test
@@ -2605,16 +2641,16 @@ public class CardEmulationTest {
         Activity activity = createAndResumeActivity();
         final CardEmulation cardEmulation = CardEmulation.getInstance(adapter);
         runWithRole(mContext, WALLET_HOLDER_PACKAGE_NAME, () -> {
+            final Intent intent = new Intent();
+            intent.setAction("com.cts.SetShouldDefaultToObserveModeForService");
+            intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+            intent.setComponent(
+                    new ComponentName("com.android.test.walletroleholder",
+                            "com.android.test.walletroleholder.WalletRoleBroadcastReceiver"));
+            mContext.sendBroadcast(intent);
+            ComponentName backgroundService =
+                    new ComponentName(mContext, CustomHostApduService.class);
             try {
-                final Intent intent = new Intent();
-                intent.setAction("com.cts.SetShouldDefaultToObserveModeForService");
-                intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-                intent.setComponent(
-                        new ComponentName("com.android.test.walletroleholder",
-                                "com.android.test.walletroleholder.WalletRoleBroadcastReceiver"));
-                mContext.sendBroadcast(intent);
-                ComponentName backgroundService =
-                        new ComponentName(mContext, CustomHostApduService.class);
                 assertTrue(cardEmulation.setShouldDefaultToObserveModeForService(
                                 backgroundService, true));
 
@@ -2652,10 +2688,11 @@ public class CardEmulationTest {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             } finally {
+                cardEmulation.setShouldDefaultToObserveModeForService(
+                                                backgroundService, false);
                 cardEmulation.unsetPreferredService(activity);
                 activity.finish();
                 adapter.notifyHceDeactivated();
-                final Intent intent = new Intent();
                 intent.setAction("com.cts.UnsetShouldDefaultToObserveModeForService");
                 intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                 intent.setComponent(

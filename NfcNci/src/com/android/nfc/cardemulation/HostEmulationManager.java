@@ -509,10 +509,8 @@ public class HostEmulationManager {
             // If this is the payment service, also add the associated services to the list of
             // packages to monitor.
             if (service.equals(mAidCache.getPreferredPaymentService().getComponentName())) {
-                for (ComponentNameAndUser preferredService
-                        : mAidCache.getPreferredPaymentAssociatedServices()) {
-                    mServicePackageNames.add(preferredService.getComponentName().getPackageName());
-                }
+                mServicePackageNames.addAll(
+                        mAidCache.getPreferredPaymentServiceAssociatedRolePackageNames());
             }
         }
 
@@ -1739,6 +1737,16 @@ public class HostEmulationManager {
 
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
+            NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
+            if (adapter == null) {
+                Log.e(TAG, "onServiceConnected: "
+                        + "adapter is null, returning");
+                return;
+            }
+            if (adapter.getAdapterState() != NfcAdapter.STATE_ON) {
+                Log.i(TAG, "onServiceConnected: NFC is not enabled, returning");
+                return;
+            }
             synchronized (mLock) {
                 ComponentNameAndUser preferredUserAndService = mAidCache.getPreferredService();
                 ComponentName preferredServiceName =
