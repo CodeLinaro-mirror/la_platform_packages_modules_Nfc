@@ -158,6 +158,7 @@ enum BindState {
   SERVICE_CONNECTED = 0;
   SERVICE_DISCONNECTED = 1;
   SERVICE_BINDING_DIED = 2;
+  SERVICE_NULL_BINDING = 3;
 }
 
 message NfcPaymentServiceBindState {
