@@ -24,6 +24,10 @@ aconfig_declarations {
     package: "com.android.nfc.module.flags",
     container: "com.android.nfcservices",
     srcs: ["*.aconfig"],
+    visibility: [
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 java_aconfig_library {
@@ -32,10 +36,12 @@ java_aconfig_library {
     defaults: ["framework-minus-apex-aconfig-java-defaults"],
     min_sdk_version: "36",
     apex_available: [
+        "//apex_available:platform",
         "com.android.nfcservices",
     ],
     visibility: [
         "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
     ],
 }
 
