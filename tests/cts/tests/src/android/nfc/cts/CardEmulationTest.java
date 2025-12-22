@@ -64,6 +64,7 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.android.compatibility.common.util.ApiTest;
 import com.android.compatibility.common.util.CommonTestUtils;
+import com.android.compatibility.common.util.ShellUtils;
 import com.android.compatibility.common.util.SystemUtil;
 
 import org.junit.After;
@@ -123,6 +124,7 @@ public class CardEmulationTest {
         mAdapter = NfcAdapter.getDefaultAdapter(mContext);
         assertNotNull("NFC Adapter is null", mAdapter);
         assertTrue("NFC Adapter could not be enabled", NfcUtils.enableNfc(mAdapter, mContext));
+        ShellUtils.runShellCommand("setprop log.tag.libnfc_nci VERBOSE");
     }
 
     @After
@@ -139,6 +141,7 @@ public class CardEmulationTest {
             Log.w("CardEmulationTest", "mAdapter or mContext is null");
         }
         sCurrentPollLoopReceiver = null;
+        ShellUtils.runShellCommand("setprop log.tag.libnfc_nci INFO");
     }
 
     @Test
@@ -1726,6 +1729,8 @@ public class CardEmulationTest {
     @RequiresFlagsEnabled({com.android.nfc.flags.Flags.FLAG_AUTO_DISABLE_OBSERVE_MODE,
                            Flags.FLAG_NFC_OBSERVE_MODE,
                            android.permission.flags.Flags.FLAG_WALLET_ROLE_ENABLED})
+    @RequiresFlagsDisabled({
+            com.android.nfc.module.nonexported.flags.Flags.FLAG_REVERT_AUTO_DISABLE_OBSERVE_MODE})
     public void testAutoDisableObserveMode() throws Exception {
         assumeVsrApiGreaterThanUdc();
         runWithRole(mContext, CTS_PACKAGE_NAME, () -> {
