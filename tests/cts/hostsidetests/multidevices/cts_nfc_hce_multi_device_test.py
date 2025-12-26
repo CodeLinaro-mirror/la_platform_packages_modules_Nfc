@@ -192,6 +192,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
                 raise Exception("Must define payment_default_service for payment tests.")
             self.emulator.nfc_emulator.waitForService(payment_default_service)
 
+        time.sleep(3) # Let NFC stack complete set up emulator
+
     def _set_up_reader_and_assert_transaction(self, expected_service=None):
         """
         Sets up reader, and asserts successful APDU transaction
@@ -226,6 +228,16 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         first_device = json_obj[0]
         return first_device["device_id"]
 
+    def _enable_nfc_logs(self, ad: android_device.AndroidDevice):
+        """
+        Enables NFC logs on the Android device.
+        """
+        ad.adb.shell("setprop persist.nfc.vendor_debug_enabled true")
+        ad.adb.shell("setprop log.tag.libnfc_nci VERBOSE")
+        ad.adb.shell("setprop persist.log.tag.libnfc_nci VERBOSE")
+        ad.adb.shell("setprop persist.nfc.snoop_log_mode full")
+        ad.reboot()
+
     def setup_class(self):
         """
         Sets up class by registering an emulator device, enabling NFC, and loading snippets.
@@ -247,8 +259,8 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         self._setup_failure_should_block_tests = True
 
         try:
-            devices = self.register_controller(android_device)[:1]
-            self.emulator = devices[0]
+            self.emulator = self.register_controller(android_device)[0]
+            self._enable_nfc_logs(self.emulator)
             self.record_mainline_version(self.emulator)
 
             self._setup_failure_reason = (
@@ -396,7 +408,7 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             payment_default_service=_PAYMENT_SERVICE_1,
             should_disable_services_on_destroy=False # Don't disable services on shutdown.
         )
-        time.sleep(3) # Let NFC stack complete set up emulator
+
         self._reboot(self.emulator)
         # Setup the payment service activity to handle the transaction after
         # reboot.
@@ -470,6 +482,7 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
             _LOG.info(f"Could not kill pid {pid} through adb.")
             self.emulator.nfc_emulator.killProcess(pid)
 
+        time.sleep(2) # Wait for the payment service to be restarted.
         self._set_up_reader_and_assert_transaction(expected_service=_PAYMENT_SERVICE_1)
 
     @CddTest(requirements = ["7.4.4/C-2-2", "7.4.4/C-1-2", "9.1/C-0-1"])
@@ -854,6 +867,7 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         """
         self._set_up_emulator(service_list=[_TRANSPORT_SERVICE_1,_TRANSPORT_SERVICE_2],
                               expected_service=_TRANSPORT_SERVICE_2, is_payment=False)
+
         command_apdus, response_apdus = get_apdus(self.emulator.nfc_emulator, _TRANSPORT_SERVICE_2)
         poll_and_transact(self.pn532, command_apdus[:1], response_apdus[:1])
 
@@ -1363,8 +1377,6 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         self._set_up_emulator(
             start_emulator_fun=self.emulator.nfc_emulator.startPollingFrameEmulatorActivity
         )
-
-        time.sleep(3) # Let NFC stack complete onServicesUpdated.
 
         timed_pn532 = TimedWrapper(self.pn532)
         testcases = [
