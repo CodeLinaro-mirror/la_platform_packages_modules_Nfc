@@ -64,6 +64,7 @@ package android.nfc {
   }
 
   public final class NfcAdapter {
+    method @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public void allowOneTransaction();
     method @FlaggedApi("android.nfc.nfc_state_change") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public boolean disable();
     method public void disableForegroundDispatch(android.app.Activity);
     method public void disableReaderMode(android.app.Activity);
@@ -71,6 +72,7 @@ package android.nfc {
     method public void enableForegroundDispatch(android.app.Activity, android.app.PendingIntent, android.content.IntentFilter[], String[][]);
     method public void enableReaderMode(android.app.Activity, android.nfc.NfcAdapter.ReaderCallback, int, android.os.Bundle);
     method public static android.nfc.NfcAdapter getDefaultAdapter(android.content.Context);
+    method @FlaggedApi("com.android.nfc.module.flags.tap_to_x") @Nullable @RequiresPermission(android.Manifest.permission.PERFORM_GESTURE_EXCHANGE) public String getGestureExchangeAid();
     method @Nullable public android.nfc.NfcAntennaInfo getNfcAntennaInfo();
     method @FlaggedApi("android.nfc.enable_nfc_charging") @Nullable public android.nfc.WlcListenerDeviceInfo getWlcListenerDeviceInfo();
     method public boolean ignore(android.nfc.Tag, int, android.nfc.NfcAdapter.OnTagRemovedListener, android.os.Handler);
@@ -80,7 +82,7 @@ package android.nfc {
     method public boolean isObserveModeSupported();
     method @FlaggedApi("com.android.nfc.module.flags.nfc_power_saving_mode") public boolean isPowerSavingModeEnabled();
     method @FlaggedApi("com.android.nfc.module.flags.nfc_power_saving_mode") public boolean isPowerSavingModeSupported();
-    method @FlaggedApi("com.android.nfc.module.flags.reader_mode_annotations") public boolean isReaderModeAnnotationSupported();
+    method @FlaggedApi("com.android.nfc.module.flags.reader_mode_annotations_api") public boolean isReaderModeAnnotationSupported();
     method @FlaggedApi("android.nfc.enable_nfc_reader_option") public boolean isReaderOptionEnabled();
     method @FlaggedApi("android.nfc.enable_nfc_reader_option") public boolean isReaderOptionSupported();
     method public boolean isSecureNfcEnabled();
@@ -106,7 +108,7 @@ package android.nfc {
     field public static final String EXTRA_NDEF_MESSAGES = "android.nfc.extra.NDEF_MESSAGES";
     field public static final String EXTRA_PREFERRED_PAYMENT_CHANGED_REASON = "android.nfc.extra.PREFERRED_PAYMENT_CHANGED_REASON";
     field public static final String EXTRA_READER_PRESENCE_CHECK_DELAY = "presence";
-    field @FlaggedApi("com.android.nfc.module.flags.reader_mode_annotations") public static final String EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION = "android.nfc.extra.READER_TECH_A_POLLING_LOOP_ANNOTATION";
+    field @FlaggedApi("com.android.nfc.module.flags.reader_mode_annotations_api") public static final String EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION = "android.nfc.extra.READER_TECH_A_POLLING_LOOP_ANNOTATION";
     field public static final String EXTRA_SECURE_ELEMENT_NAME = "android.nfc.extra.SECURE_ELEMENT_NAME";
     field public static final String EXTRA_TAG = "android.nfc.extra.TAG";
     field @FlaggedApi("android.nfc.enable_nfc_set_discovery_tech") public static final int FLAG_LISTEN_DISABLE = 0; // 0x0
@@ -150,6 +152,7 @@ package android.nfc {
 
   public static interface NfcAdapter.ReaderCallback {
     method public void onTagDiscovered(android.nfc.Tag);
+    method @FlaggedApi("com.android.nfc.module.flags.tap_to_x") public default void onTagLost();
   }
 
   public final class NfcAntennaInfo implements android.os.Parcelable {

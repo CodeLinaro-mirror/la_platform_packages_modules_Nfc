@@ -1,6 +1,7 @@
 package android.nfc.cts;
 
 import static android.Manifest.permission.NFC_SET_CONTROLLER_ALWAYS_ON;
+import static android.Manifest.permission.PERFORM_GESTURE_EXCHANGE;
 import static android.nfc.NfcOemExtension.HCE_ACTIVATE;
 import static android.nfc.NfcRoutingTableEntry.TYPE_AID;
 import static android.nfc.NfcRoutingTableEntry.TYPE_PROTOCOL;
@@ -71,6 +72,8 @@ import androidx.annotation.NonNull;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.RequiresDevice;
+
+import com.android.compatibility.common.util.PollingCheck;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -560,6 +563,55 @@ public class NfcAdapterTest {
             adapter.setObserveModeEnabled(false);
             assertFalse(adapter.isObserveModeEnabled());
             adapter.notifyHceDeactivated();
+        });
+    }
+
+    private void waitForObserveModeState(NfcAdapter adapter, boolean expectedState) {
+        try {
+            PollingCheck.check(
+                    "Timed out waiting for Observe Mode to be "
+                            + (expectedState ? "ENABLED" : "DISABLED"),
+                    5000, /* timeout in ms */
+                    () -> adapter.isObserveModeEnabled() == expectedState);
+        } catch (Exception e) {
+            throw new RuntimeException("Exception while waiting for Observe Mode state", e);
+        }
+    }
+
+    @Test
+    @RequiresFlagsEnabled({
+            com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES,
+            android.nfc.Flags.FLAG_NFC_OBSERVE_MODE
+    })
+    public void testAllowOneTransaction() throws Exception {
+        NfcAdapter adapter = getDefaultAdapter();
+        adapter.notifyHceDeactivated();
+
+        WalletRoleTestUtils.runWithRole(mContext, WalletRoleTestUtils.CTS_PACKAGE_NAME, () -> {
+
+            ComponentName originalDefault = null;
+            try {
+                originalDefault = setDefaultPaymentService(CtsMyHostApduService.class);
+                CardEmulationTest.ensurePreferredService(CtsMyHostApduService.class, mContext);
+                assumeObserveModeSupported(adapter);
+
+                assertTrue("Failed to enable observe mode as a precondition",
+                        adapter.setObserveModeEnabled(true));
+
+                waitForObserveModeState(adapter, true);
+
+                adapter.allowOneTransaction();
+
+                waitForObserveModeState(adapter, false);
+
+            } finally {
+                if (originalDefault != null) {
+                    setDefaultPaymentService(originalDefault);
+                }
+
+                adapter.setObserveModeEnabled(false);
+                adapter.notifyHceDeactivated();
+            }
         });
     }
 
@@ -1082,6 +1134,32 @@ public class NfcAdapterTest {
             if (cb != null) nfcAdapter.unregisterControllerAlwaysOnListener(cb);
             androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
                     .getUiAutomation().dropShellPermissionIdentity();
+        }
+    }
+
+    @Test
+    @RequiresFlagsEnabled(com.android.nfc.module.flags.Flags.FLAG_TAP_TO_X)
+    public void testGetGestureExchangeAid() {
+        NfcAdapter adapter = getDefaultAdapter();
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .getUiAutomation().adoptShellPermissionIdentity(PERFORM_GESTURE_EXCHANGE);
+        adapter.getGestureExchangeAid();
+    }
+
+    @Test
+    @RequiresFlagsEnabled(com.android.nfc.module.flags.Flags.FLAG_TAP_TO_X)
+    public void testRegisterAndUnregisterGestureExchangeCallbacks() {
+        NfcAdapter nfcAdapter = getDefaultAdapter();
+        assertNotNull(nfcAdapter);
+        NfcAdapter.ReaderCallback cb = new CtsReaderCallback();
+        try {
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                    .getUiAutomation().adoptShellPermissionIdentity(PERFORM_GESTURE_EXCHANGE);
+            nfcAdapter.registerGestureExchangeReaderCallback(
+                    Executors.newSingleThreadExecutor(), cb);
+
+        } finally {
+            nfcAdapter.unregisterGestureExchangeReaderCallback(cb);
         }
     }
 

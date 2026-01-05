@@ -17,7 +17,6 @@
 package com.android.nfc.cardemulation;
 
 import static com.android.nfc.module.flags.Flags.nfcHceLatencyEvents;
-import static com.android.nfc.module.flags.Flags.ceWakeLock;
 
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
@@ -809,7 +808,20 @@ public class HostEmulationManager {
         }
     }
 
-    private void allowOneTransaction() {
+    /**
+     * Temporarily disables observe mode to allow a single Host Card Emulation (HCE)
+     * transaction to proceed.
+     *
+     * <p>This method is typically invoked when an application, such as a digital wallet, needs
+     * to perform a tap-to-pay transaction while observe mode is active. It immediately posts
+     * a request to disable observe mode, allowing the HCE service to be selected by the reader.
+     *
+     * <p>Internal flags ({@code mEnableObserveModeAfterTransaction} and
+     * {@code mEnableObserveModeOnFieldOff}) are set to ensure that observe mode is
+     * automatically re-enabled after the transaction is complete or if the NFC field is lost
+     * before a transaction begins.
+     */
+    public void allowOneTransaction() {
         Log.d(TAG, "allowOneTransaction");
         mEnableObserveModeAfterTransaction = true;
         // This is needed to ensure that we re-enable observe mode
@@ -1168,14 +1180,14 @@ public class HostEmulationManager {
     }
 
     private void acquireWakeLock() {
-        if (!ceWakeLock() || mDeviceConfig.getCeWakeLockTimeoutMillis() == 0) return;
+        if (mDeviceConfig.getCeWakeLockTimeoutMillis() == 0) return;
         Log.d(TAG, "acquireWakeLock");
         mWakeLock.setWorkSource(null); // reset work source from previous transaction
         mWakeLock.acquire(mDeviceConfig.getCeWakeLockTimeoutMillis());
     }
 
     private void updateWakeLockWorkSource(ComponentNameAndUser componentNameAndUser) {
-        if (!ceWakeLock() || !mWakeLock.isHeld()) return;
+        if (!mWakeLock.isHeld()) return;
         Log.d(TAG, "updateWakeLockWorkSource: " + componentNameAndUser);
         final String packageName = componentNameAndUser.getComponentName().getPackageName();
         try {
@@ -1194,7 +1206,7 @@ public class HostEmulationManager {
     }
 
     private void releaseWakeLock() {
-        if (!ceWakeLock() || !mWakeLock.isHeld()) return;
+        if (!mWakeLock.isHeld()) return;
         Log.d(TAG, "releaseWakeLock");
         mWakeLock.release();
         mWakeLock.setWorkSource(null);
@@ -1508,7 +1520,10 @@ public class HostEmulationManager {
         if (DBG) {
             Log.d(TAG, "launchTapAgain: service=" + service.toString() + ", category=" + category);
         }
-        if (mNfcOemExtensionCallback != null) {
+        final boolean launchOemAppChooser = mContext.getResources().getBoolean(
+                com.android.nfc.R.bool.launch_oem_app_chooser);
+
+        if (mNfcOemExtensionCallback != null && launchOemAppChooser) {
             try {
                 mNfcOemExtensionCallback.onLaunchHceTapAgainActivity(service, category);
                 return;
@@ -1526,7 +1541,10 @@ public class HostEmulationManager {
 
     void launchResolver(String selectedAid, ArrayList<ApduServiceInfo> services,
         ComponentName failedComponent, String category) {
-        if (mNfcOemExtensionCallback != null) {
+        final boolean launchOemAppChooser = mContext.getResources().getBoolean(
+                com.android.nfc.R.bool.launch_oem_app_chooser);
+
+        if (mNfcOemExtensionCallback != null && launchOemAppChooser) {
             try {
                 mNfcOemExtensionCallback.onLaunchHceAppChooserActivity(
                     selectedAid, services, failedComponent, category);

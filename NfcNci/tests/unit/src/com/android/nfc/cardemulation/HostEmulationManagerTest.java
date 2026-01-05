@@ -40,6 +40,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.nfc.ComponentNameAndUser;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.ApduServiceInfo;
@@ -121,6 +122,7 @@ public class HostEmulationManagerTest {
     @Mock private NfcEventLog mNfcEventLog;
     @Mock private StatsdUtils mStatsdUtils;
     @Mock private DeviceConfigFacade mDeviceConfigFacade;
+    @Mock private Resources mResources;
     @Captor private ArgumentCaptor<Intent> mIntentArgumentCaptor;
     @Captor private ArgumentCaptor<ServiceConnection> mServiceConnectionArgumentCaptor;
     @Captor private ArgumentCaptor<List<ApduServiceInfo>> mServiceListArgumentCaptor;
@@ -164,6 +166,10 @@ public class HostEmulationManagerTest {
         when(mRegisteredAidCache.getPreferredPaymentService())
                 .thenReturn(new ComponentNameAndUser(0, null));
         when(mDeviceConfigFacade.getSlowTapThresholdMillis()).thenReturn(5);
+
+        when(mContext.getResources()).thenReturn(mResources);
+        when(mResources.getBoolean(anyInt())).thenReturn(false);
+
         mHostEmulationManager =
                 new HostEmulationManager(
                         mContext, mTestableLooper.getLooper(), mRegisteredAidCache, mStatsdUtils,
@@ -781,7 +787,6 @@ public class HostEmulationManagerTest {
     @Test
     public void testOnHostEmulationData_stateW4Select_noDefaultService_noBoundActiveService()
             throws Exception {
-        when(com.android.nfc.module.flags.Flags.ceWakeLock()).thenReturn(true);
         when(mDeviceConfigFacade.getCeWakeLockTimeoutMillis()).thenReturn(1000);
         when(mContext.getPackageManager()).thenReturn(mPackageManager);
         when(mPackageManager.getPackageUidAsUser(
@@ -1470,7 +1475,6 @@ public class HostEmulationManagerTest {
 
     @Test
     public void testWakeLockAcquireOnFieldChangeDetected() {
-        when(com.android.nfc.module.flags.Flags.ceWakeLock()).thenReturn(true);
         when(mDeviceConfigFacade.getCeWakeLockTimeoutMillis()).thenReturn(1000);
 
         mHostEmulationManager.onFieldChangeDetected(true);
@@ -1484,6 +1488,7 @@ public class HostEmulationManagerTest {
     }
 
     private void verifyTapAgainLaunched(ApduServiceInfo service, String category) {
+        verify(mContext).getResources();
         verify(mContext).getPackageName();
         verify(mContext).startActivityAsUser(mIntentArgumentCaptor.capture(), eq(USER_HANDLE));
         Intent intent = mIntentArgumentCaptor.getValue();
@@ -1496,6 +1501,7 @@ public class HostEmulationManagerTest {
 
     private void verifyResolverLaunched(
             ArrayList<ApduServiceInfo> services, ComponentName failedComponent, String category) {
+        verify(mContext).getResources();
         verify(mContext).getPackageName();
         verify(mContext)
                 .startActivityAsUser(mIntentArgumentCaptor.capture(), eq(UserHandle.CURRENT));
