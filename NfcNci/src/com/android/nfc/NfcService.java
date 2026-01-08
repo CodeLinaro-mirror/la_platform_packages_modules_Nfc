@@ -1939,10 +1939,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             try {
                 mRoutingWakeLock.acquire();
                 try {
-                    if (!mIsAlwaysOnSupported || mIsRecovering
+                    boolean isRecovering;
+                    synchronized (NfcService.this) {
+                        isRecovering = mIsRecovering;
+                    }
+                    if (!mIsAlwaysOnSupported || isRecovering
                             || (mAlwaysOnState != NfcAdapter.STATE_ON
                                 && mAlwaysOnState != NfcAdapter.STATE_TURNING_OFF)) {
-                        if (mIsRecovering) {
+                        if (isRecovering) {
                             // Recovering needs the full init. Put default value
                             mAlwaysOnState = NfcAdapter.STATE_OFF;
                             synchronized (mPowerSavingModeLock) {
@@ -2028,11 +2032,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mCardEmulationManager.onNfcEnabled();
                 }
             }
-
-            if (mIsRecovering) {
-                 // Intents for all users
-                registerGlobalBroadcastsReceiver();
-                mIsRecovering = false;
+            synchronized (NfcService.this) {
+                if (mIsRecovering) {
+                    // Intents for all users
+                    registerGlobalBroadcastsReceiver();
+                    mIsRecovering = false;
+                }
             }
 
             if (DBG) Log.d(TAG, "EnableDisableTask.enableInternal: end");
@@ -2078,6 +2083,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             // to avoid the tag being discovered again.
             maybeDisconnectTarget();
 
+            boolean isRecovering;
             synchronized (NfcService.this) {
                 // Disable delay polling when disabling
                 mPollDelayed = false;
@@ -2087,11 +2093,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mPollingDisableDeathRecipients.clear();
                 mReaderModeParams = null;
                 mDiscoveryTechParams = null;
+
+                // Handle mIsRecovering under synchronized lock
+                isRecovering = mIsRecovering;
             }
             mNfcDispatcher.resetForegroundDispatch();
 
             boolean result;
-            if (!mIsAlwaysOnSupported || mIsRecovering
+            if (!mIsAlwaysOnSupported || isRecovering
                     || (mAlwaysOnState == NfcAdapter.STATE_OFF)
                     || (mAlwaysOnState == NfcAdapter.STATE_TURNING_OFF)) {
                 result = mDeviceHost.deinitialize();
@@ -2251,14 +2260,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private void clearListenPollTech(boolean keepListenTech) {
         if (getNfcListenTech() != DEFAULT_LISTEN_TECH) {
             int listenTech = -1;
-            int pollTech = NfcAdapter.FLAG_READER_KEEP;
+            int pollTech = (NfcAdapter.FLAG_READER_KEEP | NfcAdapter.FLAG_USE_ALL_TECH
+                    | NfcAdapter.FLAG_SET_DEFAULT_TECH);
             if (keepListenTech) {
                 Log.d(TAG, "clearListenPollTech: keep listenTech");
                 listenTech = NfcAdapter.FLAG_LISTEN_KEEP;
             } else {
                 Log.d(TAG, "clearListenPollTech: clear listenTech");
-                pollTech = (NfcAdapter.FLAG_READER_KEEP | NfcAdapter.FLAG_USE_ALL_TECH
-                    | NfcAdapter.FLAG_SET_DEFAULT_TECH);
                 listenTech = (NfcAdapter.FLAG_LISTEN_KEEP | NfcAdapter.FLAG_USE_ALL_TECH
                     | NfcAdapter.FLAG_SET_DEFAULT_TECH);
             }
