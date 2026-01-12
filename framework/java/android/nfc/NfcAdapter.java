@@ -167,8 +167,11 @@ public final class NfcAdapter {
      * <p>This intent will not be started when a tag is discovered if any activities respond to
      * {@link #ACTION_NDEF_DISCOVERED} or {@link #ACTION_TECH_DISCOVERED} for the current tag.
      *
-     * @deprecated this intent action is deprecated, please use
+     * @deprecated This intent action is deprecated. Please use
      * {@link #ACTION_NDEF_DISCOVERED} or {@link #ACTION_TECH_DISCOVERED} instead.
+     * <p>To achieve the same behavior as {@link #ACTION_TAG_DISCOVERED} (listening for all
+     * types of tags), use {@link #ACTION_TECH_DISCOVERED} and include all available
+     * NFC technologies in the meta-data.
      */
     @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
     @Deprecated
@@ -1922,8 +1925,8 @@ public final class NfcAdapter {
      *       Please use with care.
      */
 
-    @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
-    public void setDiscoveryTechnology(@NonNull Activity activity,
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
+    public void setDiscoveryTechnology(@Nullable Activity activity,
             @PollTechnology int pollTechnology, @ListenTechnology int listenTechnology) {
 
         synchronized (sLock) {
@@ -1951,8 +1954,8 @@ public final class NfcAdapter {
      * @param activity The Activity that requested to change technologies.
      */
 
-    @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
-    public void resetDiscoveryTechnology(@NonNull Activity activity) {
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
+    public void resetDiscoveryTechnology(@Nullable Activity activity) {
         // Allow priv apps to pass null in activity.
         if (activity == null) {
             Binder token = new Binder();

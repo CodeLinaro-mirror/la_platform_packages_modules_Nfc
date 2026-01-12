@@ -6241,7 +6241,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private void executeReaderModeOnTagLostCallback() {
         if (mReaderModeParams != null && mReaderModeParams.callback != null) {
             try {
-                Log.e(TAG, "[Jack] executeReaderModeOnTagLostCallback - onTagLost");
                 mReaderModeParams.callback.onTagLost();
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
