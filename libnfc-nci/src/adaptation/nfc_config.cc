@@ -25,7 +25,6 @@
 #include <mutex>
 
 #include "NfcAdaptation.h"
-#include <filesystem>
 
 
 using namespace ::std;
@@ -69,16 +68,7 @@ std::string findConfigPath() {
   if (!f_path.empty()) return f_path;
 
   // load default file if the desired file not found.
-	if (std::filesystem::exists("/dev/nq-nci")){
-		return searchConfigPath("libnfc-nci-NXP.conf");
-	}
-	else if (std::filesystem::exists("/dev/st21nfc")) {
-		return searchConfigPath("libnfc-nci-STM.conf");
-	}
-	else
-	{
-		return searchConfigPath("libnfc-nci.conf");
-	}
+	return searchConfigPath("libnfc-nci.conf");
 }
 
 }  // namespace
