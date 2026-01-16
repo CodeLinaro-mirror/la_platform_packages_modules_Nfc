@@ -193,17 +193,6 @@ bool NfcTag::isActivated() { return mIsActivated; }
 
 /*******************************************************************************
 **
-** Function:        getProtocol
-**
-** Description:     Get the protocol of the current tag.
-**
-** Returns:         Protocol number.
-**
-*******************************************************************************/
-tNFC_PROTOCOL NfcTag::getProtocol() { return mProtocol; }
-
-/*******************************************************************************
-**
 ** Function         TimeDiff
 **
 ** Description      Computes time difference in milliseconds.
@@ -1516,17 +1505,18 @@ bool NfcTag::isNdefDetectionTimedOut() { return mNdefDetectionTimedOut; }
 **
 *******************************************************************************/
 void NfcTag::notifyTagDiscovered(bool discovered) {
-  ScopedAttach attach(mNativeData->vm, &mJniEnv);
-  if (mJniEnv == NULL) {
+  JNIEnv* e = NULL;
+  ScopedAttach attach(mNativeData->vm, &e);
+  if (e == NULL) {
     LOG(ERROR) << __func__ << ": jni env is null";
     return;
   }
   LOG(DEBUG) << StringPrintf("%s: discovered=%d", __func__, discovered);
-  mJniEnv->CallVoidMethod(mNativeData->manager,
+  e->CallVoidMethod(mNativeData->manager,
                           android::gCachedNfcManagerNotifyTagDiscovered,
                           discovered);
-  if (mJniEnv->ExceptionCheck()) {
-    mJniEnv->ExceptionClear();
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
     LOG(ERROR) << StringPrintf("%s: fail notify", __func__);
   }
 }
