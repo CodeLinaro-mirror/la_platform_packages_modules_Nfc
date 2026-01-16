@@ -221,7 +221,7 @@ public final class NfcActivityManager extends IAppCallback.Stub
 
     @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_TAP_TO_X)
     @Override
-    public void onTagLost(Tag tag) throws RemoteException {
+    public void onTagLost() throws RemoteException {
         NfcAdapter.ReaderCallback callback;
         synchronized (NfcActivityManager.this) {
             NfcActivityState state = findResumedActivityState();
@@ -232,7 +232,7 @@ public final class NfcActivityManager extends IAppCallback.Stub
 
         // Make callback without lock
         if (callback != null) {
-            callback.onTagLost(tag);
+            callback.onTagLost();
         }
 
     }

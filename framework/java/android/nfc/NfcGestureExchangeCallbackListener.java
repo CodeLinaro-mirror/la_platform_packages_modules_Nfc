@@ -134,13 +134,13 @@ public final class NfcGestureExchangeCallbackListener extends IReaderCallback.St
 
     @Override
     @RequiresNoPermission
-    public void onTagLost(Tag tag) throws RemoteException {
+    public void onTagLost() throws RemoteException {
         synchronized (this) {
             final long identity = Binder.clearCallingIdentity();
             try {
                 for (ReaderCallback callback : mCallbackMap.keySet()) {
                     Executor executor = mCallbackMap.get(callback);
-                    executor.execute(() -> callback.onTagLost(tag));
+                    executor.execute(() -> callback.onTagLost());
                 }
             } catch (RuntimeException ex) {
                 throw ex;
