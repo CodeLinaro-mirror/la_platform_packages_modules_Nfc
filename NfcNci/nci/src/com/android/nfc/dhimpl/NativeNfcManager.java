@@ -544,23 +544,17 @@ public class NativeNfcManager implements DeviceHost {
     private void notifyEeAidSelected(byte[] aid, String eeName) {
         Log.i(TAG, "notifyEeAidSelected: AID= " + HexFormat.of().formatHex(aid) + " selected by "
                 + eeName);
-        if (com.android.nfc.flags.Flags.eeAidSelect()) {
-            mListener.onSeSelected(NfcService.SE_SELECTED_AID, aid, eeName);
-        }
+        mListener.onSeSelected(NfcService.SE_SELECTED_AID, aid, eeName);
     }
 
     private void notifyEeProtocolSelected(int protocol, String eeName) {
         Log.i(TAG, "notifyEeProtocolSelected: Protocol: " + protocol + " selected by " + eeName);
-        if (com.android.nfc.flags.Flags.eeAidSelect()) {
-            mListener.onSeSelected(NfcService.SE_SELECTED_PROTOCOL, null, eeName);
-        }
+        mListener.onSeSelected(NfcService.SE_SELECTED_PROTOCOL, null, eeName);
     }
 
     private void notifyEeTechSelected(int tech, String eeName) {
         Log.i(TAG, "notifyEeTechSelected: Tech: " + tech + " selected by " + eeName);
-        if (com.android.nfc.flags.Flags.eeAidSelect()) {
-            mListener.onSeSelected(NfcService.SE_SELECTED_TECH, null, eeName);
-        }
+        mListener.onSeSelected(NfcService.SE_SELECTED_TECH, null, eeName);
     }
 
     public void notifyPollingLoopFrame(int data_len, byte[] p_data) {
@@ -725,6 +719,9 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native void setNciConfig(int paramId, byte[] param, int length, boolean custom);
+
+    @Override
+    public native byte[] getRfDiscoverConfig();
 
     /** wrappers for values */
     private static final int CAPS_OBSERVE_MODE_UNKNOWN =

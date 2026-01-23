@@ -26,6 +26,7 @@
 
 #include <string>
 
+#include "debug_rf_discover.h"
 #include "nci_hmsgs.h"
 #include "nfa_api.h"
 #include "nfa_dm_int.h"
@@ -855,16 +856,6 @@ static tNFC_STATUS nfa_dm_disc_force_to_idle(void) {
 static void nfa_dm_disc_deact_ntf_timeout_cback(__attribute__((unused))
                                                 TIMER_LIST_ENT* p_tle) {
   LOG(ERROR) << __func__;
-  if (nfa_dm_cb.disc_cb.disc_state == NFA_DM_RFST_LISTEN_ACTIVE) {
-    LOG(ERROR) << __func__ << ": Ignoring deact_ntf_timeout in LISTEN_ACTIVE";
-    tNFA_DM_RF_DISC_DATA p_data;
-    p_data.nfc_discover.deactivate.status = NFC_STATUS_OK;
-    p_data.nfc_discover.deactivate.type = NFC_DEACTIVATE_TYPE_IDLE;
-    p_data.nfc_discover.deactivate.is_ntf = true;
-    p_data.nfc_discover.deactivate.reason = NFC_DEACTIVATE_REASON_DH_REQ;
-    nfa_dm_disc_sm_execute(NFA_DM_RF_DEACTIVATE_NTF, &p_data);
-    return;
-  }
   nfa_dm_disc_force_to_idle();
 }
 
@@ -1825,6 +1816,7 @@ static void nfa_dm_disc_sm_idle(tNFA_DM_RF_DISC_SM_EVENT event,
       if (p_data->nfc_discover.status == NFC_STATUS_OK) {
         polling_start_cnt = 0;
         nfa_dm_disc_new_state(NFA_DM_RFST_DISCOVERY);
+        rf_discover_update();
 
         /* if RF discovery was stopped while waiting for response */
         if (nfa_dm_cb.disc_cb.disc_flags &

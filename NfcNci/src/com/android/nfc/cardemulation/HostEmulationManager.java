@@ -17,6 +17,7 @@
 package com.android.nfc.cardemulation;
 
 import static com.android.nfc.module.flags.Flags.nfcHceLatencyEvents;
+import static com.android.nfc.module.nonexported.flags.Flags.revertAutoDisableObserveMode;
 
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
@@ -567,7 +568,8 @@ public class HostEmulationManager {
                 mPollingFramesToSend.put(name, new ArrayList<>(frames));
             }
         }
-        if (Flags.autoDisableObserveMode()) {
+        // TODO(b/468068051): Remove this flag check once the feature is reverted.
+        if (Flags.autoDisableObserveMode() && !revertAutoDisableObserveMode()) {
             if (mAutoDisableObserveModeRunnable == null) {
                 mAutoDisableObserveModeRunnable = new AutoDisableObserveModeRunnable(name);
                 mHandler.postDelayed(mAutoDisableObserveModeRunnable, 3000);
@@ -1744,6 +1746,29 @@ public class HostEmulationManager {
                                     .build())
                             .build());
         }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
+            }
+
+            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPaymentServiceBindState(
+                                NfcEventProto.NfcPaymentServiceBindState.newBuilder()
+                                    .setBindState(NfcEventProto.BindState.SERVICE_NULL_BINDING)
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                name.getPackageName())
+                                            .setClassName(
+                                                name.getClassName())
+                                            .build())
+                                    .build())
+                            .build());
+        }
     };
 
     class HostEmulationServiceConnection implements ServiceConnection {
@@ -1842,6 +1867,20 @@ public class HostEmulationManager {
                     mServiceName = null;
                     mServiceBound = false;
                 }
+            }
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.i(TAG, "onBindingDied: " + name);
+            unbindServiceIfNeededLocked();
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
             }
         }
     };

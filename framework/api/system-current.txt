@@ -56,12 +56,13 @@ package android.nfc {
     method public void onWlcStateChanged(@NonNull android.nfc.WlcListenerDeviceInfo);
   }
 
-  @FlaggedApi("android.nfc.nfc_oem_extension") public final class NfcOemExtension {
+  public final class NfcOemExtension {
     method @FlaggedApi("android.nfc.nfc_oem_extension") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void clearPreference();
     method @FlaggedApi("com.android.nfc.module.flags.oem_extension_25q4") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public int emulateNfcTechnologyATag(boolean, byte, byte, byte, @NonNull byte[], byte, @Nullable byte[]);
     method @FlaggedApi("android.nfc.nfc_oem_extension") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public int forceRoutingTableCommit();
     method @FlaggedApi("android.nfc.nfc_oem_extension") @NonNull public java.util.Map<java.lang.String,java.lang.Integer> getActiveNfceeList();
     method @FlaggedApi("android.nfc.nfc_oem_extension") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public long getMaxPausePollingTimeoutMills();
+    method @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") @NonNull @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public java.util.List<android.nfc.RfDiscoverConfig> getRfDiscoverConfigurations();
     method @FlaggedApi("android.nfc.nfc_oem_extension") @NonNull @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public android.nfc.RoutingStatus getRoutingStatus();
     method @FlaggedApi("android.nfc.nfc_oem_extension") @NonNull @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public java.util.List<android.nfc.NfcRoutingTableEntry> getRoutingTable();
     method @FlaggedApi("android.nfc.nfc_oem_extension") @NonNull public android.nfc.T4tNdefNfcee getT4tNdefNfcee();
@@ -165,6 +166,25 @@ package android.nfc {
     field public static final int LOG_ACTION_TAG_DETECTED = 3; // 0x3
   }
 
+  @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public final class RfDiscoverConfig implements android.os.Parcelable {
+    ctor public RfDiscoverConfig(int, @IntRange(from=1, to=10) int);
+    method public int describeContents();
+    method @IntRange(from=1, to=10) public int getFrequency();
+    method public int getTechnologyMode();
+    method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field @NonNull public static final android.os.Parcelable.Creator<android.nfc.RfDiscoverConfig> CREATOR;
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_ACTIVE_LISTEN_MODE = 131; // 0x83
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_ACTIVE_POLL_MODE = 3; // 0x3
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_A_KOVIO_POLL_MODE = 119; // 0x77
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_A_PASSIVE_LISTEN_MODE = 128; // 0x80
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_A_PASSIVE_POLL_MODE = 0; // 0x0
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_B_PASSIVE_LISTEN_MODE = 129; // 0x81
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_B_PASSIVE_POLL_MODE = 1; // 0x1
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_F_PASSIVE_LISTEN_MODE = 130; // 0x82
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_F_PASSIVE_POLL_MODE = 2; // 0x2
+    field @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") public static final int NFC_V_PASSIVE_POLL_MODE = 6; // 0x6
+  }
+
   @FlaggedApi("android.nfc.nfc_oem_extension") public class RoutingStatus {
     method @FlaggedApi("com.android.nfc.module.flags.oem_extension_25q4") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public int getDefaultFelicaRoute();
     method @FlaggedApi("android.nfc.nfc_oem_extension") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public int getDefaultIsoDepRoute();
@@ -247,6 +267,8 @@ package android.nfc.cardemulation {
     method @FlaggedApi("android.nfc.enable_nfc_mainline") @NonNull public java.util.List<android.nfc.cardemulation.ApduServiceInfo> getServices(@NonNull String, int);
     method @FlaggedApi("android.nfc.nfc_override_recover_routing_table") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void overrideRoutingTable(@NonNull android.app.Activity, int, int);
     method @FlaggedApi("android.nfc.nfc_override_recover_routing_table") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void recoverRoutingTable(@NonNull android.app.Activity);
+    method @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public boolean setDefaultForNextTap(@NonNull android.content.ComponentName);
+    method @FlaggedApi("com.android.nfc.module.flags.nfcstack_26q2_updates") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public boolean setDefaultForNextTap(int, @NonNull android.content.ComponentName);
     method @FlaggedApi("android.nfc.enable_card_emulation_euicc") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public int setDefaultNfcSubscriptionId(int);
     method @FlaggedApi("android.nfc.nfc_set_service_enabled_for_category_other") @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public int setServiceEnabledForCategoryOther(@NonNull android.content.ComponentName, boolean);
     field @FlaggedApi("android.nfc.nfc_set_service_enabled_for_category_other") public static final int SET_SERVICE_ENABLED_STATUS_FAILURE_ALREADY_SET = 3; // 0x3

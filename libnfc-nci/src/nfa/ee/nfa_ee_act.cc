@@ -730,7 +730,7 @@ tNFA_EE_ECB* nfa_ee_find_aid_offset(uint8_t aid_len, uint8_t* p_aid,
     if (p_ecb->aid_entries) {
       offset = 0;
       for (xx = 0; xx < p_ecb->aid_entries; xx++) {
-        if ((p_ecb->aid_cfg[offset + aid_len_offset] == aid_len) &&
+        if ((p_ecb->aid_cfg && p_ecb->aid_cfg[offset + aid_len_offset] == aid_len) &&
             (memcmp(&p_ecb->aid_cfg[offset + aid_len_offset + 1], p_aid,
                     aid_len) == 0)) {
           p_ret = p_ecb;
@@ -958,13 +958,9 @@ void nfa_ee_api_mode_set(tNFA_EE_MSG* p_data) {
     nfa_ee_report_event(nullptr, NFA_EE_MODE_SET_EVT, &nfa_ee_cback_data);
     return;
   }
-  /* set the NFA_EE_STATUS_PENDING bit to indicate the status is not exactly
-   * active */
-  if (p_data->mode_set.mode == NFC_MODE_ACTIVATE)
-    p_cb->ee_status = NFA_EE_STATUS_PENDING | NFA_EE_STATUS_ACTIVE;
-  else {
-    p_cb->ee_status = NFA_EE_STATUS_INACTIVE;
-    /* DH should release the NCI connection before deactivate the NFCEE */
+
+  /* DH should release the NCI connection before deactivate the NFCEE */
+  if (p_data->mode_set.mode != NFC_MODE_ACTIVATE) {
     if (p_cb->conn_st == NFA_EE_CONN_ST_CONN) {
       p_cb->conn_st = NFA_EE_CONN_ST_DISC;
       NFC_ConnClose(p_cb->conn_id);
@@ -1232,7 +1228,7 @@ void nfa_ee_api_add_aid(tNFA_EE_MSG* p_data) {
   if (p_chk_cb) {
     LOG(WARNING) << StringPrintf("%s: The AID entry is already in the database",
                                  __func__);
-    if (p_chk_cb == p_cb) {
+    if (p_chk_cb == p_cb && p_cb->aid_rt_info && p_cb->aid_info) {
       p_cb->aid_rt_info[entry] |= NFA_EE_AE_ROUTE;
       p_cb->aid_info[entry] = p_add->aidInfo;
       new_size = nfa_ee_total_lmrt_size();
@@ -1273,17 +1269,25 @@ void nfa_ee_api_add_aid(tNFA_EE_MSG* p_data) {
         evt_data.status = NFA_STATUS_BUFFER_FULL;
       } else {
         /* add AID */
-        p_cb->aid_pwr_cfg[p_cb->aid_entries] = p_add->power_state;
-        p_cb->aid_info[p_cb->aid_entries] = p_add->aidInfo;
-        p_cb->aid_rt_info[p_cb->aid_entries] = NFA_EE_AE_ROUTE;
+        if (p_cb->aid_pwr_cfg) {
+          p_cb->aid_pwr_cfg[p_cb->aid_entries] = p_add->power_state;
+        }
+        if (p_cb->aid_info) {
+          p_cb->aid_info[p_cb->aid_entries] = p_add->aidInfo;
+        }
+        if (p_cb->aid_rt_info) {
+          p_cb->aid_rt_info[p_cb->aid_entries] = NFA_EE_AE_ROUTE;
+        }
         p = p_cb->aid_cfg + len;
-        p_start = p;
-        *p++ = NFA_EE_AID_CFG_TAG_NAME;
-        *p++ = p_add->aid_len;
-        memcpy(p, p_add->p_aid, p_add->aid_len);
-        p += p_add->aid_len;
+        if (p) {
+          p_start = p;
+          *p++ = NFA_EE_AID_CFG_TAG_NAME;
+          *p++ = p_add->aid_len;
+          memcpy(p, p_add->p_aid, p_add->aid_len);
+          p += p_add->aid_len;
 
-        p_cb->aid_len[p_cb->aid_entries++] = (uint8_t)(p - p_start);
+          p_cb->aid_len[p_cb->aid_entries++] = (uint8_t)(p - p_start);
+        }
       }
     } else {
       LOG(ERROR) << StringPrintf("%s: Exceed NFA_EE_MAX_AID_ENTRIES=%d",
@@ -2463,10 +2467,15 @@ void nfa_ee_nci_mode_set_rsp(tNFA_EE_MSG* p_data) {
     nfa_ee_report_event(p_cb->p_ee_cback, NFA_EE_MODE_SET_EVT,
                         &nfa_ee_cback_data);
 
-    if ((p_cb->ee_status == NFC_NFCEE_STATUS_INACTIVE) ||
-        (p_cb->ee_status == NFC_NFCEE_STATUS_ACTIVE)) {
-      /* Report NFA_EE_DISCOVER_REQ_EVT for all active NFCEE */
-      nfa_ee_report_discover_req_evt();
+    if (p_rsp->status == NFA_STATUS_OK) {
+      if ((p_cb->ee_status == NFC_NFCEE_STATUS_INACTIVE) ||
+          (p_cb->ee_status == NFC_NFCEE_STATUS_ACTIVE)) {
+        /* Report NFA_EE_DISCOVER_REQ_EVT for all active NFCEE */
+        nfa_ee_report_discover_req_evt();
+      }
+    } else {
+      LOG(WARNING) << StringPrintf("%s: status=%d do not update RT", __func__,
+                                   p_rsp->status);
     }
   }
   if (nfa_ee_cb.p_enable_cback)
@@ -2809,8 +2818,14 @@ void nfa_ee_get_tech_route(uint8_t power_state, uint8_t* p_handles) {
 
   for (xx = 0; xx < NFA_EE_MAX_TECH_ROUTE; xx++) {
     p_handles[xx] = NFC_DH_ID;
-    if (nfa_ee_cb.cur_ee > 0) p_cb = &nfa_ee_cb.ecb[nfa_ee_cb.cur_ee - 1];
-    for (yy = 0; yy < nfa_ee_cb.cur_ee; yy++, p_cb--) {
+    if (nfa_ee_cb.cur_ee > 0 && nfa_ee_cb.cur_ee <= NFA_EE_NUM_ECBS) {
+      p_cb = &nfa_ee_cb.ecb[nfa_ee_cb.cur_ee - 1];
+    }
+    if (p_cb == nullptr) {
+      LOG(ERROR) << StringPrintf("%s:p_cb is null", __func__);
+      return;
+    }
+    for (yy = 0; yy < nfa_ee_cb.cur_ee && yy < NFA_EE_NUM_ECBS; yy++, p_cb--) {
       if ((p_cb->ee_status & ~NFA_EE_STATUS_MEP_MASK) ==
           NFC_NFCEE_STATUS_ACTIVE) {
         switch (power_state) {

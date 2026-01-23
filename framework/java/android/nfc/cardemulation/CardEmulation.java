@@ -969,18 +969,39 @@ public final class CardEmulation {
     }
 
     /**
+     * Sets the default service for the next tap.
+     *
+     * <p>This API allows an OEM extension or authorized system app to
+     * specify which service should handle the immediate next transaction.
+     *
+     * @param service The component name of the service to be used.
+     * @return true if the default was successfully set.
      * @hide
      */
-    public boolean setDefaultForNextTap(ComponentName service) {
+    @SystemApi
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    public boolean setDefaultForNextTap(@NonNull ComponentName service) {
         return callServiceReturn(() ->
                 sService.setDefaultForNextTap(
                     mContext.getUser().getIdentifier(), service), false);
     }
 
     /**
+     * Sets the default service for the next tap for a specific user.
+     *
+     * <p>This API allows an OEM extension or authorized system app to
+     * specify which service should handle the immediate next transaction for a specific user.
+     *
+     * @param userId The user id of the user context.
+     * @param service The component name of the service to be used.
+     * @return true if the default was successfully set.
      * @hide
      */
-    public boolean setDefaultForNextTap(int userId, ComponentName service) {
+    @SystemApi
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
+    @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+    public boolean setDefaultForNextTap(@UserIdInt int userId, @NonNull ComponentName service) {
         return callServiceReturn(() ->
                 sService.setDefaultForNextTap(userId, service), false);
     }
@@ -1184,6 +1205,11 @@ public final class CardEmulation {
         if (technology >= PROTOCOL_AND_TECHNOLOGY_ROUTE_DEFAULT) {
             throw new IllegalArgumentException("Invalid technology inputs.");
         }
+        if (protocol == PROTOCOL_AND_TECHNOLOGY_ROUTE_UNSET
+                && technology == PROTOCOL_AND_TECHNOLOGY_ROUTE_UNSET) {
+            throw new IllegalArgumentException("At least one routing parameter must be set.");
+        }
+
         String protocolRoute = routeIntToString(protocol);
         String technologyRoute = routeIntToString(technology);
         callService(() ->
