@@ -3795,7 +3795,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 if (DBG) Log.i(TAG, "registerGestureExchangeCallback");
                 NfcPermissions.enforceGestureExchangePermissions(mContext);
                 mNfcGestureExchangeCallback = callback;
-                //mDeviceHost.enableGestureExchangeAid(true);
             }
         }
 
@@ -3806,7 +3805,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 if (DBG) Log.i(TAG, "unregisterGestureExchangeCallback");
                 NfcPermissions.enforceGestureExchangePermissions(mContext);
                 mNfcGestureExchangeCallback = null;
-                //mDeviceHost.enableGestureExchangeAid(false);
             }
         }
 
@@ -5283,8 +5281,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     public void clearT3tIdentifiersCache() {
-        Log.d(TAG, "clearT3tIdentifiersCache");
-        mDeviceHost.clearT3tIdentifiersCache();
+        if (NativeNfcManager.getInstance().isT3TIdentifierRegistered()) {
+            Log.d(TAG, "clearT3tIdentifiersCache");
+            mDeviceHost.disableDiscovery();
+
+            mDeviceHost.clearT3tIdentifiersCache();
+            NfcDiscoveryParameters params = computeDiscoveryParameters(mScreenState);
+            boolean shouldRestart = mCurrentDiscoveryParameters.shouldEnableDiscovery();
+            mDeviceHost.enableDiscovery(params, shouldRestart);
+        }
     }
 
     public int getLfT3tMax() {
@@ -5610,6 +5615,38 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         }
                         break;
                     }
+
+                    if (mNfcGestureExchangeCallback != null) {
+                        byte[] gestureAidCheckCmd = {0x00, (byte) 0xA4, 0x04, 0x00, 0x06,
+                                (byte) 0xA0, 0x00, 0x00, 0x04, 0x76, 0x09, 0x00};
+                        int[] retCode = new int[2];
+                        byte[] respData = tag.transceive(gestureAidCheckCmd, false, retCode);
+
+                        if (respData != null && respData.length >= 2) {
+                            if (respData[respData.length - 2] == (byte) 0x90
+                                    && respData[respData.length - 1] == 0x00) {
+                                Log.d(TAG, "Gesture Exchange AID exists, skipping ndef read");
+                                Tag tagGestureExchange = new Tag(tag.getUid(), tag.getTechList(),
+                                                        tag.getTechExtras(), tag.getHandle(),
+                                                        mCookieUpToDate, mNfcTagService);
+                                registerTagObject(tag);
+                                registerTag(tagGestureExchange);
+                                try {
+                                    mNfcGestureExchangeCallback.onTagDiscovered(tagGestureExchange);
+                                } catch (RemoteException e) {
+                                    Log.e(TAG, "mNfcGestureExchangeCallback remote has died: ", e);
+                                    // Intentional fall-through
+                                } catch (Exception e) {
+                                    // Catch any other exception
+                                    Log.e(TAG, "mNfcGestureExchangeCallback: App exception"
+                                            + " , not dispatching ", e);
+                                }
+                                tag.startPresenceChecking(presenceCheckDelay, callback);
+                                break;
+                            }
+                        }
+                    }
+
                     NdefMessage ndefMsg = tag.findAndReadNdef();
 
                     if (ndefMsg == null) {
