@@ -2414,7 +2414,14 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
                                  __FUNCTION__, status);
       return;
     } else {
-      sNfaSetPowerSubState.wait();
+      if (!sNfaSetPowerSubState.wait(5000)) {
+        LOG(ERROR) << StringPrintf(
+            "%s: Wait for NFA_SetPowerSubStateForScreenState timeout",
+            __func__);
+
+        nfaDeviceManagementCallback(NFA_DM_NFCC_TIMEOUT_EVT, nullptr);
+        return;
+      }
     }
   }
 
@@ -2466,7 +2473,14 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
       LOG(ERROR) << StringPrintf("%s: fail enable SetScreenState; error=0x%X",
                                  __FUNCTION__, status);
     } else {
-      sNfaSetPowerSubState.wait();
+      if (!sNfaSetPowerSubState.wait(5000)) {
+        LOG(ERROR) << StringPrintf(
+            "%s: Wait for NFA_SetPowerSubStateForScreenState timeout",
+            __func__);
+
+        nfaDeviceManagementCallback(NFA_DM_NFCC_TIMEOUT_EVT, nullptr);
+        return;
+      }
     }
   }
 
