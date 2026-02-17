@@ -167,8 +167,11 @@ public final class NfcAdapter {
      * <p>This intent will not be started when a tag is discovered if any activities respond to
      * {@link #ACTION_NDEF_DISCOVERED} or {@link #ACTION_TECH_DISCOVERED} for the current tag.
      *
-     * @deprecated this intent action is deprecated, please use
+     * @deprecated This intent action is deprecated. Please use
      * {@link #ACTION_NDEF_DISCOVERED} or {@link #ACTION_TECH_DISCOVERED} instead.
+     * <p>To achieve the same behavior as {@link #ACTION_TAG_DISCOVERED} (listening for all
+     * types of tags), use {@link #ACTION_TECH_DISCOVERED} and include all available
+     * NFC technologies in the meta-data.
      */
     @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
     @Deprecated
@@ -287,7 +290,10 @@ public final class NfcAdapter {
      * calling {@link #enableReaderMode(Activity, ReaderCallback, int, Bundle)}.
      *
      * This polling loop annotation will be included as a non-standard polling frame which will be
-     * reported to via {@link android.nfc.cardemulation.HostApduService#processPollingFrames(List)}
+     * reported to via {@link android.nfc.cardemulation.HostApduService#processPollingFrames(List)}.
+     * If there is no explicit value set by the app, the device will emit the default annotation.
+     * Use {@code new byte[0]} as annotation in the extra to override the default and don't emit
+     * any annotation.
      */
     @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_READER_MODE_ANNOTATIONS_API)
     public static final String EXTRA_READER_TECH_A_POLLING_LOOP_ANNOTATION =
@@ -660,7 +666,7 @@ public final class NfcAdapter {
          * Called when the previously discovered tag is lost.
          */
         @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_TAP_TO_X)
-        default void onTagLost() {
+        default void onTagLost(@NonNull Tag tag) {
             // Do nothing by default.
             // Apps can optionally override this.
         }
@@ -1922,8 +1928,8 @@ public final class NfcAdapter {
      *       Please use with care.
      */
 
-    @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
-    public void setDiscoveryTechnology(@NonNull Activity activity,
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
+    public void setDiscoveryTechnology(@Nullable Activity activity,
             @PollTechnology int pollTechnology, @ListenTechnology int listenTechnology) {
 
         synchronized (sLock) {
@@ -1951,8 +1957,8 @@ public final class NfcAdapter {
      * @param activity The Activity that requested to change technologies.
      */
 
-    @FlaggedApi(Flags.FLAG_ENABLE_NFC_SET_DISCOVERY_TECH)
-    public void resetDiscoveryTechnology(@NonNull Activity activity) {
+    @FlaggedApi(com.android.nfc.module.flags.Flags.FLAG_NFCSTACK_26Q2_UPDATES)
+    public void resetDiscoveryTechnology(@Nullable Activity activity) {
         // Allow priv apps to pass null in activity.
         if (activity == null) {
             Binder token = new Binder();

@@ -243,6 +243,7 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
     LOG(ERROR) << fn << ": Failed to register wildcard AID for DH";
 
   // Trigger RT update
+  gFirstRun = true;
   mNfceeListenConfig.nb_config = 0;
   setEeInfoChangedFlag();
   mDefaultAidRouteAdded = false;
@@ -358,7 +359,7 @@ bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
   mAidRoutingConfigured = false;
   tNFA_STATUS nfaStat =
       NFA_EeAddAidRouting(route, aidLen, (uint8_t*)aid, powerState, aidInfo);
-  if (nfaStat == NFA_STATUS_OK) {
+  if (!sIsRecovering && nfaStat == NFA_STATUS_OK) {
     LOG(DEBUG) << StringPrintf("%s: wait for mAidAddRemoveEvent completion",
                                fn);
     mAidAddRemoveEvent.wait();

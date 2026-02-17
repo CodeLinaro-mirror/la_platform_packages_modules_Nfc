@@ -198,6 +198,7 @@ public final class NfcServiceTest {
     @Mock AppOpsManager mAppOpsManager;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
+    @Captor ArgumentCaptor<BroadcastReceiver> mManagedProfileReceiver;
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
     @Captor ArgumentCaptor<Integer> mSoundCaptor;
     @Captor ArgumentCaptor<Intent> mIntentArgumentCaptor;
@@ -310,6 +311,11 @@ public final class NfcServiceTest {
         verify(mApplication).registerReceiverForAllUsers(
                 mGlobalReceiver.capture(),
                 argThat(intent -> intent.hasAction(Intent.ACTION_SCREEN_ON)), any(), any());
+        verify(mApplication).registerReceiverForAllUsers(
+                mManagedProfileReceiver.capture(),
+                argThat(intent -> intent.hasAction(Intent.ACTION_MANAGED_PROFILE_ADDED)),
+                isNull(),
+                isNull());
         verify(mApplication).registerReceiver(mBroadcastReceiverArgumentCaptor.capture(),
                 argThat(intent -> intent.hasAction(UserManager.ACTION_USER_RESTRICTIONS_CHANGED)));
         clearInvocations(mDeviceHost, mNfcInjector, mApplication);
@@ -351,6 +357,68 @@ public final class NfcServiceTest {
     public void testDisable() throws Exception {
         enableAndVerify();
         disableAndVerify();
+    }
+
+    @Test
+    public void testEnable_clearsObjectMaps() throws Exception {
+        // Add mock objects to object maps
+        Object mockObject = new Object();
+        mNfcService.mObjectMap.put(1, mockObject);
+        mNfcService.mTagObjectMap.put(1, mockObject);
+
+        // Enable NFC
+        enableAndVerify();
+
+        // Verify that object maps are cleared
+        assertTrue(
+          "mObjectMap should be cleared on enable", mNfcService.mObjectMap.isEmpty());
+        assertTrue(
+          "mTagObjectMap should be cleared on enable", mNfcService.mTagObjectMap.isEmpty());
+    }
+
+    @Test
+    public void testDisable_disconnectsTagsAndClearsMaps() throws Exception {
+        // Enable NFC first
+        enableAndVerify();
+
+        // Add a mock TagEndpoint to the object map
+        DeviceHost.TagEndpoint mockTagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        mNfcService.mObjectMap.put(1, mockTagEndpoint);
+        mNfcService.mTagObjectMap.put(1, new Object());
+
+        // Disable NFC
+        disableAndVerify();
+
+        // Verify that disconnect was called on the tag endpoint
+        verify(mockTagEndpoint).disconnect();
+
+        // Verify that object maps are cleared
+        assertTrue(
+          "mObjectMap should be cleared on disable", mNfcService.mObjectMap.isEmpty());
+        assertTrue(
+          "mTagObjectMap should be cleared on disable", mNfcService.mTagObjectMap.isEmpty());
+    }
+
+    @Test
+    public void testStopPresenceChecking_withReaderMode_callsOnTagLost() throws Exception {
+        // Set up reader mode with a callback
+        NfcService.ReaderModeParams readerParams = mNfcService.new ReaderModeParams();
+        readerParams.callback = mock(android.nfc.IAppCallback.class);
+        mNfcService.mReaderModeParams = readerParams;
+
+        // Add a mock tag to the tag object map and a mock endpoint to object map
+        Tag mockTag = mock(Tag.class);
+        DeviceHost.TagEndpoint mockTagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        mNfcService.mTagObjectMap.put(1, mockTag);
+        mNfcService.mObjectMap.put(1, mockTagEndpoint);
+
+        // onRfDiscoveryEvent(false) calls StopPresenceChecking
+        mDeviceHostListener.getValue().onRfDiscoveryEvent(false);
+
+        // Verify that onTagLost was called on the reader mode callback
+        verify(readerParams.callback).onTagLost(mockTag);
+        // Verify that the tag object map is cleared
+        assertTrue(mNfcService.mTagObjectMap.isEmpty());
     }
 
     @Test
@@ -1326,6 +1394,43 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void testIsPackageInstalled_createContextFails_returnsFalse() throws Exception {
+        // This test verifies that if creating a user context fails with an IllegalStateException,
+        // isPackageInstalled correctly handles it and returns false.
+
+        // Arrange
+        UserHandle userHandle = UserHandle.of(10);
+        // Mock getEnabledProfiles to return our test user, so initTagAppPrefList processes it.
+        when(mUserManager.getEnabledProfiles()).thenReturn(Collections.singletonList(userHandle));
+
+        // Mock createContextAsUser to throw IllegalStateException for our test user.
+        // This simulates a failure to create the user's context (e.g., user is stopping).
+        when(mApplication.createContextAsUser(eq(userHandle), anyInt()))
+                .thenThrow(new IllegalStateException("Test Exception: User context not available"));
+
+        // Get the receiver that handles profile changes.
+        BroadcastReceiver receiver = mManagedProfileReceiver.getValue();
+        Intent intent = new Intent(Intent.ACTION_MANAGED_PROFILE_ADDED);
+        intent.putExtra(Intent.EXTRA_USER, userHandle);
+
+        // Act
+        // Trigger the receiver to call initTagAppPrefList, which in turn calls isPackageInstalled.
+        receiver.onReceive(mApplication, intent);
+        mLooper.dispatchAll();
+
+        // Assert
+        // The call to isPackageInstalled should have failed and returned false due to the
+        // exception.
+        // As a result, no packages from the blocklist should be added to the preferences for this
+        // user.
+        Map<String, Boolean> prefList = mNfcService.mTagAppPrefList.get(10);
+
+        // The preference map for the user should exist but be empty.
+        assertThat(prefList).isNotNull();
+        assertThat(prefList).isEmpty();
+    }
+
+    @Test
     public void testIsSecureNfcEnabled() {
         mNfcService.mIsSecureNfcEnabled = true;
         boolean isSecureNfcEnabled = mNfcService.isSecureNfcEnabled();
@@ -2195,7 +2300,8 @@ public final class NfcServiceTest {
         verify(tagEndpoint).disconnect();
         mLooper.dispatchAll();
         assertThat(result).isTrue();
-
+        // Verify that the tag object is removed from the map
+        Assert.assertNull(mNfcService.mObjectMap.get(1));
     }
 
     @Test
@@ -2641,5 +2747,63 @@ public final class NfcServiceTest {
 
         // Assert: deviceSupportsNfcSecure should be false
         assertFalse(mNfcService.mNfcAdapter.deviceSupportsNfcSecure());
+    }
+
+    private DeviceHost.TagEndpoint setupMockTagEndpoint() {
+        DeviceHost.TagEndpoint mockTagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        mNfcService.mObjectMap.put(1, mockTagEndpoint);
+        return mockTagEndpoint;
+    }
+
+    @Test
+    public void onRfDiscoveryEvent_discoveryStopped_stopsPresenceChecking() {
+        // Arrange
+        DeviceHost.TagEndpoint mockTagEndpoint = setupMockTagEndpoint();
+        DeviceHost.DeviceHostListener listener = mDeviceHostListener.getValue();
+
+        // Act
+        listener.onRfDiscoveryEvent(false);
+
+        // Assert
+        verify(mockTagEndpoint).stopPresenceChecking(false);
+    }
+
+    @Test
+    public void onRfDiscoveryEvent_discoveryStarted_doesNotStopPresenceChecking() {
+        // Arrange
+        DeviceHost.TagEndpoint mockTagEndpoint = setupMockTagEndpoint();
+        DeviceHost.DeviceHostListener listener = mDeviceHostListener.getValue();
+
+        // Act
+        listener.onRfDiscoveryEvent(true);
+
+        // Assert
+        verify(mockTagEndpoint, never()).stopPresenceChecking(anyBoolean());
+    }
+
+    @Test
+    public void onTagRfDiscovered_tagNotDiscovered_stopsPresenceChecking() {
+        // Arrange
+        DeviceHost.TagEndpoint mockTagEndpoint = setupMockTagEndpoint();
+        DeviceHost.DeviceHostListener listener = mDeviceHostListener.getValue();
+
+        // Act
+        listener.onTagRfDiscovered(false);
+
+        // Assert
+        verify(mockTagEndpoint).stopPresenceChecking(false);
+    }
+
+    @Test
+    public void onTagRfDiscovered_tagDiscovered_doesNotStopPresenceChecking() {
+        // Arrange
+        DeviceHost.TagEndpoint mockTagEndpoint = setupMockTagEndpoint();
+        DeviceHost.DeviceHostListener listener = mDeviceHostListener.getValue();
+
+        // Act
+        listener.onTagRfDiscovered(true);
+
+        // Assert
+        verify(mockTagEndpoint, never()).stopPresenceChecking(anyBoolean());
     }
 }
