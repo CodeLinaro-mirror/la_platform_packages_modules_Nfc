@@ -1493,17 +1493,6 @@ bool NfcTag::isT2tNackResponse(const uint8_t* response, uint32_t responseLen) {
 
 /*******************************************************************************
 **
-** Function:        isNdefDetectionTimedOut
-**
-** Description:     Whether NDEF-detection algorithm timed out.
-**
-** Returns:         True if NDEF-detection algorithm timed out.
-**
-*******************************************************************************/
-bool NfcTag::isNdefDetectionTimedOut() { return mNdefDetectionTimedOut; }
-
-/*******************************************************************************
-**
 ** Function:        notifyTagDiscovered
 **
 ** Description:     Notify NFC service about tag discovery.
@@ -1549,6 +1538,11 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
       if ((disc_result.status == NFA_STATUS_OK) && !mIsReselecting) {
         notifyTagDiscovered(true);
         discoverTechnologies(disc_result);
+      }
+      if (disc_result.status == NFA_STATUS_OK) {
+        // Tag/tags not really active but not idle either,
+        // This enables deactivating the tag properly if needed
+        setActivationState();
       }
     } break;
 
