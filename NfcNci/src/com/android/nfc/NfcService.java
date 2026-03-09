@@ -2806,6 +2806,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean isNfcSecureEnabled() throws RemoteException {
             synchronized (NfcService.this) {
+                int current_userId = ActivityManager.getCurrentUser();
+                if (mUserId != current_userId) {
+                    loadSecureNfcSettings(current_userId);
+                }
                 return mIsSecureNfcEnabled;
             }
         }
@@ -5676,7 +5680,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         break;
                     }
 
-                    if (mNfcGestureExchangeCallback != null) {
+                    if (mNfcGestureExchangeCallback != null
+                            && tag.getConnectedTechnology() == TagTechnology.ISO_DEP) {
                         byte[] gestureAidCheckCmd = {0x00, (byte) 0xA4, 0x04, 0x00, 0x06,
                                 (byte) 0xA0, 0x00, 0x00, 0x04, 0x76, 0x09, 0x00};
                         int[] retCode = new int[2];
