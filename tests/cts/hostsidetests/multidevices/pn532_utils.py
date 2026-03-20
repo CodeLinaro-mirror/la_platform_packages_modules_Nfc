@@ -71,10 +71,12 @@ def _activate_rf_field(serial_path: str):
 
 
 def _check_logcat_for_nfc(ad) -> bool:
-    """Checks device logs for NFC activation events."""
+    """Checks device logs for NFC activation events, ignoring adbd echoes."""
     try:
-        output = ad.adb.shell(f"logcat -d | grep -E '{NFC_LOGCAT_PATTERN.pattern}'")
-        if output:
+        cmd = f"logcat -d | grep -E '{NFC_LOGCAT_PATTERN.pattern}' | grep -v 'adbd'"
+        output = ad.adb.shell(cmd)
+
+        if output and b"adbd service requested" not in output:
             return True
     except Exception:
         pass
@@ -119,10 +121,14 @@ def discover_active_pair(android_devices: list) -> tuple[str, str]:
 
         for ad in android_devices:
             if _check_logcat_for_nfc(ad):
-                _LOG.info("✅ PAIR FOUND! PN532(%s) <==> Android(%s)", port, ad.serial)
-                locked_ser = serial.Serial(port, PN532_BAUD_RATE, exclusive=True)
-                locked_ser.reset_input_buffer()
-                return locked_ser, port, ad.serial
+                _LOG.info("PAIR FOUND! PN532(%s) <==> Android(%s)", port, ad.serial)
+                try:
+                    locked_ser = serial.Serial(port, PN532_BAUD_RATE, exclusive=True)
+                    locked_ser.reset_input_buffer()
+                    return locked_ser, port, ad.serial
+                except serial.SerialException as e:
+                    _LOG.error("Too slow! Port %s was snatched by another process during log check: %s", port, e)
+                    break
 
         _LOG.info("No devices responded to port %s", port)
         # Cooldown prevents signal overlap
