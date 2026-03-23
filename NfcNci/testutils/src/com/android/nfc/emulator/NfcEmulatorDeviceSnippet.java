@@ -19,6 +19,7 @@ import android.app.Instrumentation;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.nfc.NfcAdapter;
+import android.nfc.Tag;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
 import android.os.Build;
@@ -533,6 +534,44 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
     public void asyncWaitForTagLostException(String callbackId, String eventName) {
         registerSnippetBroadcastReceiver(
                 callbackId, eventName, PN532Activity.ACTION_TAG_LOST_CATCH);
+    }
+
+    /**
+     * Writes NDEF message to the discovered tag over a background thread and signals python
+     * client on success.
+     */
+    @AsyncRpc(description = "Writes NDEF message to the discovered tag")
+    public void asyncWriteNdefMessage(String callbackId, String eventName, String ndefMessageHex) {
+        new Thread(() -> {
+            try {
+                if (mActivity == null || !(mActivity instanceof PN532Activity)) {
+                    Log.e(TAG, "Activity not available or not PN532Activity");
+                    return;
+                }
+                Tag tag = ((PN532Activity) mActivity).getDiscoveredTag();
+                if (tag == null) {
+                    Log.e(TAG, "No tag discovered to write to");
+                    return;
+                }
+                android.nfc.tech.Ndef ndef = android.nfc.tech.Ndef.get(tag);
+                if (ndef == null) {
+                    Log.e(TAG, "Tag does not support NDEF");
+                    return;
+                }
+                ndef.connect();
+                byte[] msgBytes = HceUtils.hexStringToBytes(ndefMessageHex);
+                android.nfc.NdefMessage ndefMessage = new android.nfc.NdefMessage(msgBytes);
+                ndef.writeNdefMessage(ndefMessage);
+                ndef.close();
+
+                Log.d(TAG, "NDEF Write Success");
+                com.google.android.mobly.snippet.event.SnippetEvent event =
+                    new com.google.android.mobly.snippet.event.SnippetEvent(callbackId, eventName);
+                com.google.android.mobly.snippet.event.EventCache.getInstance().postEvent(event);
+            } catch (Exception e) {
+                Log.e(TAG, "Write NDEF failed", e);
+            }
+        }).start();
     }
 
     /** Enable reader mode with given flags. */
