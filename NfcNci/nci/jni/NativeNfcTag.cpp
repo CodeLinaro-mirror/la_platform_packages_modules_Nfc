@@ -558,6 +558,10 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetIdx,
     LOG(ERROR) << StringPrintf("%s: NFC disabling in progress", __func__);
     return NFCSTATUS_FAILED;
   }
+  if (nfcManager_isNfcActive() == false) {
+    LOG(DEBUG) << StringPrintf("%s: NFC is no longer active", __func__);
+    return JNI_FALSE;
+  }
   sIsoDepPresCheckCnt = 0;
   sPresCheckErrCnt = 0;
   sIsoDepPresCheckAlternate = false;
@@ -670,12 +674,6 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
   int rVal = 1;
 
   do {
-    // if tag has shutdown, abort this method
-    if (NfcTag::getInstance().isNdefDetectionTimedOut()) {
-      LOG(DEBUG) << StringPrintf("%s: ndef detection timeout; break", __func__);
-      rVal = STATUS_CODE_TARGET_LOST;
-      break;
-    }
     if ((sCurrentRfInterface == NFA_INTERFACE_FRAME) &&
         (NFC_GetNCIVersion() >= NCI_VERSION_2_0)) {
       {
