@@ -175,7 +175,6 @@ static bool sIsShuttingDown = false;
 #define DEFAULT_DISCOVERY_DURATION 500
 #define READER_MODE_DISCOVERY_DURATION 200
 #define FLAG_SET_DEFAULT_TECH 0x40000000
-#define DEFAULT_MAX_POLLING_WAIT_TIME 5000
 
 static void nfaConnectionCallback(uint8_t event, tNFA_CONN_EVT_DATA* eventData);
 static void nfaDeviceManagementCallback(uint8_t event,
@@ -550,10 +549,8 @@ static void nfaConnectionCallback(uint8_t connEvent,
     } break;
     case NFA_DEACTIVATED_EVT:  // NFC link/protocol deactivated
       LOG(DEBUG) << StringPrintf(
-          "%s: NFA_DEACTIVATED_EVT   Type=%u, gIsTagDeactivating=%d, "
-          "gIsSelectingRfInterface=%d",
-          __func__, eventData->deactivated.type, gIsTagDeactivating,
-          gIsSelectingRfInterface);
+          "%s: NFA_DEACTIVATED_EVT   Type=%u, gIsTagDeactivating=%d", __func__,
+          eventData->deactivated.type, gIsTagDeactivating);
       NfcTag::getInstance().setDeactivationState(eventData->deactivated);
 
       if (eventData->deactivated.type != NFA_DEACTIVATE_TYPE_SLEEP) {
@@ -1307,41 +1304,37 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
                             (jint)param_len, dataJavaArray.get());
         } break;
         case NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF: {
-          LOG(INFO) << StringPrintf("%s: Observe mode suspended NTF received",
-                                    __func__);
+          LOG(INFO) << "Observe mode suspended NTF received";
           gObserveModeEnabled = false;
           struct nfc_jni_native_data* nat = getNative(NULL, NULL);
           if (!nat) {
-            LOG(ERROR) << StringPrintf("%s: cached nat is null", __func__);
-            return;
+              LOG(ERROR) << StringPrintf("cached nat is null");
+              return;
           }
           JNIEnv* e = NULL;
           ScopedAttach attach(nat->vm, &e);
           if (e == NULL) {
-            LOG(ERROR) << StringPrintf("%s: jni env is null", __func__);
-            return;
+              LOG(ERROR) << StringPrintf("jni env is null");
+              return;
           }
           if (param_len <= 2) {
-            LOG(ERROR) << StringPrintf(
-                "%s: Cannot parse exit frame from "
-                "NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF",
-                __func__);
-            return;
+              LOG(ERROR) <<
+                    "Cannot parse exit frame from NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF";
+              return;
           }
           jint exit_frame_type = (jint) p_param[4];
           uint16_t exit_frame_len = p_param[5];
           ScopedLocalRef<jobject> dataJavaArray(e, e->NewByteArray(exit_frame_len));
           if (dataJavaArray.get() == NULL) {
-            LOG(ERROR) << StringPrintf("%s: fail allocate array", __func__);
-            return;
+              LOG(ERROR) << "fail allocate array";
+              return;
           }
           if (exit_frame_len > 0) {
               e->SetByteArrayRegion((jbyteArray)dataJavaArray.get(), 0, exit_frame_len,
                                     (jbyte*)(p_param + 6));
               if (e->ExceptionCheck()) {
                   e->ExceptionClear();
-                  LOG(ERROR)
-                      << StringPrintf("%s: failed to fill array", __func__);
+                  LOG(ERROR) << "failed to fill array";
                   return;
               }
           }
@@ -1351,19 +1344,18 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
           return;
         } break;
         case NCI_ANDROID_PASSIVE_OBSERVER_RESUMED_NTF: {
-          LOG(INFO) << StringPrintf("%s: Observe mode resumed NTF received",
-                                    __func__);
+          LOG(INFO) << "Observe mode resumed NTF received";
           gObserveModeEnabled = true;
           struct nfc_jni_native_data *nat = getNative(NULL, NULL);
           if (!nat) {
-            LOG(ERROR) << StringPrintf("%s: cached nat is null", __func__);
-            return;
+              LOG(ERROR) << StringPrintf("cached nat is null");
+              return;
           }
           JNIEnv *e = NULL;
           ScopedAttach attach(nat->vm, &e);
           if (e == NULL) {
-            LOG(ERROR) << StringPrintf("%s: jni env is null", __func__);
-            return;
+              LOG(ERROR) << StringPrintf("jni env is null");
+              return;
           }
           e->CallVoidMethod(nat->manager,
                             android::gCachedNfcManagerOnObserveModeEnabledInFirmware);
@@ -1502,14 +1494,12 @@ static jboolean nfcManager_setObserveMode(JNIEnv* e, jobject o,
   if (sIsShuttingDown || sIsRecovering || sIsDisabling || !sIsNfaEnabled)
     return false;
   if (isObserveModeSupported(e, o) == JNI_FALSE) {
-    LOG(DEBUG) << StringPrintf(
-        "%s: Observe mode not supported, returning false", __func__);
+    LOG(DEBUG) << "setObserveMode called when it isn't supported, returning false";
     return false;
   }
 
   if (isObserveModeSupportedWithoutRfDeactivation(e, o) == JNI_FALSE) {
-    LOG(DEBUG) << StringPrintf(
-        "%s: Observe mode requires RF off/on, returning false", __func__);
+    LOG(DEBUG) << "setObserveMode called when it requires RF off/on, returning false";
     return false;
   }
 
@@ -2150,10 +2140,8 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
 
     tNFA_STATUS stat = NFA_Disable(!sIsRecovering);
     if (stat == NFA_STATUS_OK) {
-      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
-          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
       LOG(DEBUG) << StringPrintf("%s: wait for completion", __func__);
-      if (!sNfaDisableEvent.wait(max_polling_wait_time)) {
+      if (!sNfaDisableEvent.wait(5000)) {
         LOG(ERROR) << StringPrintf(
             "%s: NFA_Disable() timeout, keep disabling anyway", __func__);
       }
@@ -2423,9 +2411,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
                                  __FUNCTION__, status);
       return;
     } else {
-      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
-          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
-      if (!sNfaSetPowerSubState.wait(max_polling_wait_time)) {
+      if (!sNfaSetPowerSubState.wait(5000)) {
         LOG(ERROR) << StringPrintf(
             "%s: Wait for NFA_SetPowerSubStateForScreenState timeout",
             __func__);
@@ -2491,21 +2477,15 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
       LOG(ERROR) << StringPrintf("%s: fail enable SetScreenState; error=0x%X",
                                  __FUNCTION__, status);
     } else {
-      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
-          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
-      if (!sNfaSetPowerSubState.wait(max_polling_wait_time)) {
+      if (!sNfaSetPowerSubState.wait(5000)) {
         LOG(ERROR) << StringPrintf(
             "%s: Wait for NFA_SetPowerSubStateForScreenState timeout",
             __func__);
 
-        status = NFA_STATUS_TIMEOUT;
+        nfaDeviceManagementCallback(NFA_DM_NFCC_TIMEOUT_EVT, nullptr);
+        return;
       }
     }
-  }
-
-  if (status == NFA_STATUS_TIMEOUT) {
-    nfaDeviceManagementCallback(NFA_DM_NFCC_TIMEOUT_EVT, nullptr);
-    return;
   }
 
   // skip remaining SetScreenState tasks when trying to silent recover NFCC
@@ -2802,10 +2782,8 @@ static void nfcManager_setDiscoveryTech(JNIEnv* e, jobject o, jint pollTech,
 
   if (nfaStat == NFA_STATUS_OK) {
     // wait for NFA_LISTEN_DISABLED_EVT
-    int16_t max_polling_wait_time = NfcConfig::getUnsigned(
-        NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
     LOG(DEBUG) << StringPrintf("%s: wait for completion", __func__);
-    if (!sNfaEnableDisablePollingEvent.wait(max_polling_wait_time)) {
+    if (!sNfaEnableDisablePollingEvent.wait(5000)) {
       LOG(ERROR) << StringPrintf("%s: wait for NFA_LISTEN_DISABLED_EVT timeout",
                                  __func__);
     }
@@ -3154,10 +3132,8 @@ void startRfDiscovery(bool isStart) {
     SyncEventGuard guard(sNfaEnableDisablePollingEvent);
     status = isStart ? NFA_StartRfDiscovery() : NFA_StopRfDiscovery();
     if (!sIsRecovering && status == NFA_STATUS_OK) {
-      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
-          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
       LOG(DEBUG) << StringPrintf("%s: Wait for completion timeout", __func__);
-      if (!sNfaEnableDisablePollingEvent.wait(max_polling_wait_time)) {
+      if (!sNfaEnableDisablePollingEvent.wait(5000)) {
         LOG(ERROR) << StringPrintf(
             "%s: Wait for NFA_RF_DISCOVERY_xxxx_EVT timeout. Restart NFC "
             "service...",

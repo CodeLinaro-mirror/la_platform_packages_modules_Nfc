@@ -505,7 +505,7 @@ public class RoutingOptionManager {
         // Fallback to default if the string is empty
         if (!TextUtils.isEmpty(name)) {
             mPrefs.edit().putString(key, name).apply();
-            Log.d(TAG, "writeRoutingOption: Add " + key + ":" + name + " to mPrefs.");
+            Log.d(TAG, "Add " + key + ":" + name + " to mPrefs.");
             return;
         }
         int route = switch (key) {
@@ -515,7 +515,7 @@ public class RoutingOptionManager {
             case KEY_DEFAULT_FELICA_ROUTE -> doGetDefaultFelicaRouteDestination();
             case KEY_DEFAULT_SC_ROUTE -> doGetDefaultScRouteDestination();
             default -> {
-                Log.e(TAG, "writeRoutingOption: Unexpected key:" + key);
+                Log.e(TAG, "Unexpected key:" + key);
                 yield ROUTE_UNKNOWN;
             }
         };
@@ -523,8 +523,7 @@ public class RoutingOptionManager {
             return;
         }
         mPrefs.edit().putString(key, getSecureElementForRoute(route)).apply();
-        Log.d(TAG, "writeRoutingOption: Add default " + key + ":"
-                + getSecureElementForRoute(route) + " to mPrefs.");
+        Log.d(TAG, "Add default " + key + ":" + getSecureElementForRoute(route) + " to mPrefs.");
     }
 
     private void writeRoutingOption(String key, boolean value) {
@@ -589,7 +588,7 @@ public class RoutingOptionManager {
                     R.bool.telephony_subscription_routing_enabled);
             if (telephonySubscriptionEnabled) {
                 if (mPreferredSimSettings.type == TelephonyUtils.SIM_TYPE_UNKNOWN) {
-                    Log.e(TAG, "getAlternativeRouteIfSimIsInvalid: sim " + route + " is invalid");
+                    Log.e(TAG, "getAlternativeRouteIfSimIsInvalid: sim is invalid");
                     return getRouteForSecureElement(mIsEseCapable
                             ? (SE_PREFIX_ESE + 1) : DEVICE_HOST);
                 }

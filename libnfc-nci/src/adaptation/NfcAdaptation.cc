@@ -1358,7 +1358,7 @@ void NfcAdaptation::HalDownloadFirmwareCallback(nfc_event_t event,
     p_msg->status = event_status;
     GKI_send_msg(NFC_TASK, NFC_MBOX_ID, p_msg);
   } else {
-    LOG(ERROR) << StringPrintf("%s: No buffer", func);
+    LOG(ERROR) << StringPrintf("No buffer");
   };
 }
 
@@ -1391,9 +1391,9 @@ void NfcAdaptation::HalDownloadFirmwareDataCallback(uint16_t data_len,
     memcpy((uint8_t*)(p_msg + 1) + p_msg->offset, p_data, p_msg->len);
 
     GKI_send_msg(NFC_TASK, NFC_MBOX_ID, p_msg);
-    LOG(VERBOSE) << StringPrintf("%s: GKI msg sent!", func);
+    LOG(VERBOSE) << StringPrintf("GKI msg sent!");
   } else {
-    LOG(ERROR) << StringPrintf("%s: No buffer", func);
+    LOG(ERROR) << StringPrintf("No buffer");
   }
 }
 
@@ -1506,7 +1506,7 @@ bool ThreadCondVar::wait(long millisec) {
   struct timespec absoluteTime;
 
   if (clock_gettime(CLOCK_MONOTONIC, &absoluteTime) == -1) {
-    LOG(ERROR) << StringPrintf("%s: fail get time; errno=0x%X", __func__,
+    LOG(ERROR) << StringPrintf("ThreadCondVar::wait: fail get time; errno=0x%X",
                                errno);
   } else {
     absoluteTime.tv_sec += millisec / 1000;
@@ -1520,7 +1520,7 @@ bool ThreadCondVar::wait(long millisec) {
 
   int waitResult = pthread_cond_timedwait(&mCondVar, *this, &absoluteTime);
   if ((waitResult != 0) && (waitResult != ETIMEDOUT))
-    LOG(ERROR) << StringPrintf("%s: fail timed wait; error=0x%X", __func__,
+    LOG(ERROR) << StringPrintf("ThreadCondVar::wait: fail timed wait; error=0x%X",
                                waitResult);
   retVal = (waitResult == 0);  // waited successfully
   if (retVal) pthread_mutex_unlock(*this);

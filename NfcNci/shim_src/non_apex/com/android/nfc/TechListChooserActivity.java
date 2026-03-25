@@ -35,8 +35,7 @@ public class TechListChooserActivity extends ResolverActivity {
         Parcelable targetParcelable = intent.getParcelableExtra(Intent.EXTRA_INTENT);
         if (!(targetParcelable instanceof Intent)) {
             super.onCreate(savedInstanceState);
-            Log.w("TechListChooserActivity", "onCreate: Target is not an intent: "
-                    + targetParcelable);
+            Log.w("TechListChooserActivity", "Target is not an intent: " + targetParcelable);
             finish();
             return;
         }
