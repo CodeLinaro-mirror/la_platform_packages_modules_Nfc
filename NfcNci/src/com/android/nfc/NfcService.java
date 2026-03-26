@@ -6320,9 +6320,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 new EnableDisableTask().execute(TASK_DISABLE);
             }
             String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(mUserId);
-            mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
-                    mDeviceConfigFacade.getDefaultSecureNfcState())
-                    && mIsSecureNfcCapable;
+            if (mUserId == UserHandle.SYSTEM.getIdentifier()
+                    && !mPrefs.contains(PREF_SECURE_NFC_ON + "_"
+                            + UserHandle.SYSTEM.getIdentifier())) {
+                mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON, false);
+            } else {
+                mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
+                        mDeviceConfigFacade.getDefaultSecureNfcState())
+                        && mIsSecureNfcCapable;
+            }
             mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
         }
     };
