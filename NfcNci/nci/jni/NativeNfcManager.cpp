@@ -464,6 +464,22 @@ static void nfaConnectionCallback(uint8_t connEvent,
 
     case NFA_ACTIVATED_EVT:  // NFC link/protocol activated
     {
+      // Check whether this is a proprietary rf interface to be ignored.
+      // If so shouldn't be processed by libnfc as prop module handles
+      // the processing. Otherwise continue normal processing.
+      if (NfcConfig::hasKey(NAME_PROP_RF_IFACE_LIST)) {
+        std::vector<uint8_t> ignorePropIntfs =
+            NfcConfig::getBytes(NAME_PROP_RF_IFACE_LIST);
+        if (std::find(ignorePropIntfs.begin(), ignorePropIntfs.end(),
+                      eventData->activated.activate_ntf.intf_param.type) !=
+            ignorePropIntfs.end()) {
+          LOG(INFO) << StringPrintf(
+              "%s: NFA_ACTIVATED_EVT: Prop Rf iface %02X found in ignore list, "
+              "returning",
+              __func__, eventData->activated.activate_ntf.intf_param.type);
+          break;
+        }
+      }
       bool notListen = !isListenMode(eventData->activated);
       LOG(DEBUG) << StringPrintf(
           "%s: NFA_ACTIVATED_EVT: gIsSelectingRfInterface=%d, sIsDisabling=%d",

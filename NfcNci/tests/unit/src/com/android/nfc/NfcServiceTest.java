@@ -116,7 +116,6 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.test.TestLooper;
-import android.platform.test.annotations.DisableFlags;
 import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
@@ -3127,5 +3126,17 @@ public final class NfcServiceTest {
         Assert.assertNotNull(tag);
         Assert.assertEquals(12345L, mNfcService.mCookieUpToDate);
         verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(), any());
+    }
+
+    @Test
+    public void testGetT4tNfceeAid() {
+        byte[] aidBytes = {(byte) 0xD2, 0x76, 0x00, 0x00, (byte) 0x85, 0x01, 0x01};
+        when(mDeviceHost.getT4tNfceeAid()).thenReturn(aidBytes);
+        String aid = mNfcService.getT4tNfceeAid();
+        assertThat(aid).isEqualTo("D2760000850101");
+
+        when(mDeviceHost.getT4tNfceeAid()).thenReturn(null);
+        aid = mNfcService.getT4tNfceeAid();
+        assertThat(aid).isNull();
     }
 }
