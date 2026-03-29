@@ -2866,6 +2866,27 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void testApplyRouting_whenNfcEnabled_forcesUpdate() {
+        // Set NFC state to ON
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        mNfcService.mScreenState = ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
+        mNfcService.mIsReaderOptionEnabled = true;
+
+        // applyRouting is package-private, can be called directly from test
+        // This will cover the creation, start, and cancellation of mRoutingWatchDog
+        mNfcService.applyRouting(true);
+
+        // Verify that discovery methods on DeviceHost are called
+        verify(mDeviceHost).enableDiscovery(any(NfcDiscoveryParameters.class), anyBoolean());
+    }
+
+    @Test
+    public void cancelRoutingWatchDog_whenWatchdogIsNull_doesNotCrash() {
+        // Should not crash when watchdog is null
+        mNfcService.cancelRoutingWatchDog();
+    }
+
+    @Test
     public void testDeviceSupportsNfcSecure_HceAndSecureNfcCapable_ReturnsTrue() {
         // Arrange: HCE is capable and secure NFC is configured as capable
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION))
