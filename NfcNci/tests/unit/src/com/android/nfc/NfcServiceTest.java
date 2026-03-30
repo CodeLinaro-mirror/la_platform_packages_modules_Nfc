@@ -50,6 +50,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -127,7 +128,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.cardemulation.CardEmulationManager;
+import com.android.nfc.cardemulation.HostEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
+import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.flags.Flags;
 import com.android.nfc.wlc.NfcCharging;
 
@@ -140,6 +143,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
@@ -196,6 +200,7 @@ public final class NfcServiceTest {
     @Mock VrManager mVrManager;
     @Mock RoleManager mRoleManager;
     @Mock AppOpsManager mAppOpsManager;
+    @Mock NativeNfcManager mNativeNfcManager;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
     @Captor ArgumentCaptor<BroadcastReceiver> mManagedProfileReceiver;
@@ -233,6 +238,9 @@ public final class NfcServiceTest {
                 .mockStatic(NfcStatsLog.class)
                 .mockStatic(android.permission.flags.Flags.class)
                 .mockStatic(NfcInjector.class)
+                .mockStatic(NativeNfcManager.class)
+                .mockStatic(android.provider.Settings.Secure.class)
+                .mockStatic(com.android.nfc.module.flags.Flags.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         MockitoAnnotations.initMocks(this);
@@ -288,6 +296,7 @@ public final class NfcServiceTest {
         when(NfcProperties.info_antpos_Y()).thenReturn(List.of());
         when(NfcProperties.initialized()).thenReturn(Optional.of(Boolean.TRUE));
         when(NfcProperties.vendor_debug_enabled()).thenReturn(Optional.of(Boolean.TRUE));
+        when(NativeNfcManager.getInstance()).thenReturn(mNativeNfcManager);
         when(mPackageManager.getPackageUid(PKG_NAME, 0)).thenReturn(Binder.getCallingUid());
         createNfcService();
     }
@@ -1975,6 +1984,43 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void clearT3tIdentifiersCache_whenIdentifierRegistered_restartsDiscovery() {
+        // Arrange
+        when(mNativeNfcManager.isT3TIdentifierRegistered()).thenReturn(true);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        mNfcService.mScreenState = ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
+        // Set current discovery to be enabled to verify shouldRestart is true
+        mNfcService.mCurrentDiscoveryParameters = NfcDiscoveryParameters.newBuilder()
+                .setTechMask(NfcDiscoveryParameters.NFC_POLL_DEFAULT)
+                .setEnableReaderMode(true)
+                .build();
+
+        // Act
+        mNfcService.clearT3tIdentifiersCache();
+
+        // Assert
+        InOrder inOrder = inOrder(mDeviceHost);
+        inOrder.verify(mDeviceHost).disableDiscovery();
+        inOrder.verify(mDeviceHost).clearT3tIdentifiersCache();
+        inOrder.verify(mDeviceHost).enableDiscovery(any(NfcDiscoveryParameters.class), eq(true));
+    }
+
+    @Test
+    public void clearT3tIdentifiersCache_whenIdentifierNotRegistered_doesNothing() {
+        // Arrange
+        when(mNativeNfcManager.isT3TIdentifierRegistered()).thenReturn(false);
+
+        // Act
+        mNfcService.clearT3tIdentifiersCache();
+
+        // Assert
+        verify(mDeviceHost, never()).disableDiscovery();
+        verify(mDeviceHost, never()).clearT3tIdentifiersCache();
+        verify(mDeviceHost, never()).enableDiscovery(any(NfcDiscoveryParameters.class),
+                anyBoolean());
+    }
+
+    @Test
     public void testEnableReaderOption() throws RemoteException {
         when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
         INfcOemExtensionCallback callback = mock(INfcOemExtensionCallback.class);
@@ -2803,5 +2849,147 @@ public final class NfcServiceTest {
 
         // Assert
         verify(mockTagEndpoint, never()).stopPresenceChecking(anyBoolean());
+    }
+
+    @Test
+    public void testRegisterGestureExchangeCallback_tapToXEnabled_observeModeSupported_pollFrameSet()
+            throws Exception {
+        when(com.android.nfc.module.flags.Flags.tapToX()).thenReturn(true);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(mDeviceHost.isObserveModeSupported()).thenReturn(true);
+        when(android.provider.Settings.Secure.getString(
+                any(), eq(HostEmulationManager.GESTURE_POLL_FRAME_SETTINGS_KEY)))
+                .thenReturn("some_string");
+
+        android.nfc.IReaderCallback callback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(callback);
+
+        assertTrue(mNfcService.isObserveModeAlwaysOnEnabled());
+    }
+
+    @Test
+    public void testRegisterGestureExchangeCallback_tapToXEnabled_observeModeSupported_pollFrameNotSet()
+            throws Exception {
+        when(com.android.nfc.module.flags.Flags.tapToX()).thenReturn(true);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(mDeviceHost.isObserveModeSupported()).thenReturn(true);
+        when(android.provider.Settings.Secure.getString(
+                any(), eq(HostEmulationManager.GESTURE_POLL_FRAME_SETTINGS_KEY)))
+                .thenReturn(null);
+
+        android.nfc.IReaderCallback callback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(callback);
+
+        assertFalse(mNfcService.isObserveModeAlwaysOnEnabled());
+    }
+
+    @Test
+    public void testRegisterGestureExchangeCallback_tapToXDisabled() throws Exception {
+        when(com.android.nfc.module.flags.Flags.tapToX()).thenReturn(false);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(mDeviceHost.isObserveModeSupported()).thenReturn(true);
+        when(android.provider.Settings.Secure.getString(
+                any(), eq(HostEmulationManager.GESTURE_POLL_FRAME_SETTINGS_KEY)))
+                .thenReturn("some_string");
+
+        android.nfc.IReaderCallback callback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(callback);
+
+        assertFalse(mNfcService.isObserveModeAlwaysOnEnabled());
+    }
+
+    @Test
+    public void testUnregisterGestureExchangeCallback_tapToXEnabled_observeModeSupported()
+            throws Exception {
+        when(com.android.nfc.module.flags.Flags.tapToX()).thenReturn(true);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(mDeviceHost.isObserveModeSupported()).thenReturn(true);
+        mNfcService.setObserveModeAlwaysOn(true);
+
+        android.nfc.IReaderCallback callback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.unregisterGestureExchangeCallback(callback);
+
+        assertFalse(mNfcService.isObserveModeAlwaysOnEnabled());
+    }
+
+    @Test
+    public void testUnregisterGestureExchangeCallback_tapToXDisabled() throws Exception {
+        when(com.android.nfc.module.flags.Flags.tapToX()).thenReturn(false);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(mDeviceHost.isObserveModeSupported()).thenReturn(true);
+        mNfcService.setObserveModeAlwaysOn(true);
+
+        android.nfc.IReaderCallback callback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.unregisterGestureExchangeCallback(callback);
+
+        assertTrue(mNfcService.isObserveModeAlwaysOnEnabled());
+    }
+
+    @Test
+    public void testMsg_Ndef_Tag_GestureExchange() throws RemoteException {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+
+        android.nfc.IReaderCallback gestureCallback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(gestureCallback);
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.ISO_DEP);
+        when(tagEndpoint.getUid()).thenReturn(new byte[]{0x01, 0x02});
+        when(tagEndpoint.getTechList()).thenReturn(new int[]{TagTechnology.ISO_DEP});
+        when(tagEndpoint.getTechExtras()).thenReturn(new Bundle[]{new Bundle()});
+        when(tagEndpoint.getHandle()).thenReturn(1);
+
+        byte[] respData = new byte[]{(byte) 0x90, 0x00};
+        when(tagEndpoint.transceive(any(), eq(false), any())).thenReturn(respData);
+
+        msg.obj = tagEndpoint;
+
+        mNfcService.mCookieUpToDate = -1;
+
+        handler.handleMessage(msg);
+
+        ArgumentCaptor<Tag> tagCaptor = ArgumentCaptor.forClass(Tag.class);
+        verify(gestureCallback).onTagDiscovered(tagCaptor.capture());
+        Tag tag = tagCaptor.getValue();
+        Assert.assertNotNull(tag);
+        Assert.assertNotEquals(-1, mNfcService.mCookieUpToDate);
+        verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(), any());
+    }
+
+    @Test
+    public void testMsg_Ndef_Tag_GestureExchange_CookieAlreadySet() throws RemoteException {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+
+        android.nfc.IReaderCallback gestureCallback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(gestureCallback);
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.ISO_DEP);
+        when(tagEndpoint.getUid()).thenReturn(new byte[]{0x01, 0x02});
+        when(tagEndpoint.getTechList()).thenReturn(new int[]{TagTechnology.ISO_DEP});
+        when(tagEndpoint.getTechExtras()).thenReturn(new Bundle[]{new Bundle()});
+        when(tagEndpoint.getHandle()).thenReturn(1);
+
+        byte[] respData = new byte[]{(byte) 0x90, 0x00};
+        when(tagEndpoint.transceive(any(), eq(false), any())).thenReturn(respData);
+
+        msg.obj = tagEndpoint;
+
+        mNfcService.mCookieUpToDate = 12345L;
+
+        handler.handleMessage(msg);
+
+        ArgumentCaptor<Tag> tagCaptor = ArgumentCaptor.forClass(Tag.class);
+        verify(gestureCallback).onTagDiscovered(tagCaptor.capture());
+        Tag tag = tagCaptor.getValue();
+        Assert.assertNotNull(tag);
+        Assert.assertEquals(12345L, mNfcService.mCookieUpToDate);
+        verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(), any());
     }
 }
