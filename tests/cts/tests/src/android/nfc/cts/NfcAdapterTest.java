@@ -233,6 +233,10 @@ public class NfcAdapterTest {
         NfcAdapter adapter = getDefaultAdapter();
         assumeTrue("Device must support secure NFC", adapter.isSecureNfcSupported());
 
+        if (adapter.isSecureNfcEnabled()) {
+            adapter.enableSecureNfc(/* enable = */ false);
+        }
+
         assertTrue(adapter.enableSecureNfc(/* enable = */ true));
         assertTrue(adapter.isSecureNfcEnabled());
 

@@ -15,6 +15,11 @@ public class PN532Activity extends BaseEmulatorActivity implements ReaderCallbac
 
     private volatile boolean mIsPolling = false;
     private boolean mStressTestTagLoss = false;
+    private Tag mDiscoveredTag = null;
+
+    public Tag getDiscoveredTag() {
+        return mDiscoveredTag;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,6 +55,7 @@ public class PN532Activity extends BaseEmulatorActivity implements ReaderCallbac
     @Override
     public void onTagDiscovered(Tag tag) {
         Log.d(TAG, "onTagDiscovered");
+        mDiscoveredTag = tag;
         Intent intent = new Intent(ACTION_TAG_DISCOVERED);
         sendBroadcast(intent);
 

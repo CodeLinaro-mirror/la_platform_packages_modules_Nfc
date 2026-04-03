@@ -21,6 +21,7 @@ import static android.content.pm.PackageManager.MATCH_DEFAULT_ONLY;
 import static android.nfc.Flags.enableNfcMainline;
 
 import static com.android.nfc.module.flags.Flags.nfcstack26q2Updates;
+import static com.android.nfc.module.nonexported.flags.Flags.ndefWeblinkNotification;
 import static com.android.nfc.NfcService.WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS;
 
 import android.app.Activity;
@@ -1369,6 +1370,14 @@ class NfcDispatcher {
     }
 
     boolean showWebLinkConfirmation(DispatchInfo dispatch) {
+        if (ndefWeblinkNotification()) {
+            PendingIntent pIntent = PendingIntent.getActivity(mContext, 0, dispatch.rootIntent,
+                    PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+            mNfcInjector.createNfcWeblinkNotification(mContext, dispatch.getUri(), pIntent)
+                    .startNotification();
+            return true;
+        }
+        // TODO(b/487776769): Remove all of the following code when the flag is fully ramped up.
         if (!mContext.getResources().getBoolean(R.bool.enable_nfc_url_open_dialog)) {
             return dispatch.tryStartActivity();
         }

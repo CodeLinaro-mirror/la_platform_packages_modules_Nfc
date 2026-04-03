@@ -27,3 +27,10 @@ flag {
         purpose: PURPOSE_BUGFIX
     }
 }
+
+flag {
+    name: "ndef_weblink_notification"
+    namespace: "nfc"
+    description: "Use a notification to replace showWebLinkConfirmation"
+    bug: "487776769"
+}
