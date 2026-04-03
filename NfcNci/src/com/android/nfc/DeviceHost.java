@@ -367,4 +367,9 @@ public interface DeviceHost {
     * Get the committed rf discover configuration
     */
     byte[] getRfDiscoverConfig();
+
+    /**
+     * Set the default frame for tech A polling loop.
+     */
+    void setDefaultFrame(byte[] frame);
 }

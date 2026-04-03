@@ -21,6 +21,7 @@ import static android.content.pm.PackageManager.MATCH_DEFAULT_ONLY;
 import static android.nfc.Flags.enableNfcMainline;
 
 import static com.android.nfc.module.flags.Flags.nfcstack26q2Updates;
+import static com.android.nfc.module.nonexported.flags.Flags.ndefWeblinkNotification;
 import static com.android.nfc.NfcService.WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS;
 
 import android.app.Activity;
@@ -52,6 +53,7 @@ import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.Ndef;
 import android.nfc.tech.NfcBarcode;
+import android.nfc.tech.TagTechnology;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -254,10 +256,16 @@ class NfcDispatcher {
             // 1. The application is not stopped
             // 2. The activity must be protected by permission DISPATCH_NFC_MESSAGE
             if ((info.activityInfo.applicationInfo.flags & ApplicationInfo.FLAG_STOPPED) != 0) {
+                Log.w(TAG, "Activity " + info.activityInfo.name + " stopped");
                 return false;
             }
-            return TextUtils.equals(info.activityInfo.permission,
+            boolean hasPermission = TextUtils.equals(info.activityInfo.permission,
                     "android.permission.DISPATCH_NFC_MESSAGE");
+            if (!hasPermission) {
+                Log.w(TAG, "Activity " + info.activityInfo.name
+                        + " does not have DISPATCH_NFC_MESSAGE permission");
+            }
+            return hasPermission;
         }
     }
 
@@ -915,6 +923,16 @@ class NfcDispatcher {
         return receiveOemCallbackResult(tag,message);
     }
 
+    private String getAidFromGestureTag(Tag tag) {
+        if (tag == null) return null;
+
+        Bundle ndefExtras = tag.getTechExtras(TagTechnology.NDEF);
+        if (ndefExtras != null) {
+            return ndefExtras.getString(NfcAdapter.EXTRA_AID);
+        }
+        return null;
+    }
+
     boolean tryActivityOrLaunchAppStore(DispatchInfo dispatch, List<String> packages,
         boolean isAar) {
         for (String pkg : packages) {
@@ -946,6 +964,12 @@ class NfcDispatcher {
                     return false;
                 }
                 Intent appLaunchIntent = pm.getLaunchIntentForPackage(firstPackage);
+                Tag tag = dispatch.tag;
+                appLaunchIntent.putExtra(NfcAdapter.EXTRA_TAG, tag);
+                String aid = getAidFromGestureTag(tag);
+                if (aid != null) {
+                    appLaunchIntent.putExtra(NfcAdapter.EXTRA_AID, aid);
+                }
                 if (appLaunchIntent != null) {
                     ResolveInfo ri = pm.resolveActivity(appLaunchIntent, 0);
                     if (ri != null && ri.activityInfo != null && ri.activityInfo.exported
@@ -1346,6 +1370,14 @@ class NfcDispatcher {
     }
 
     boolean showWebLinkConfirmation(DispatchInfo dispatch) {
+        if (ndefWeblinkNotification()) {
+            PendingIntent pIntent = PendingIntent.getActivity(mContext, 0, dispatch.rootIntent,
+                    PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+            mNfcInjector.createNfcWeblinkNotification(mContext, dispatch.getUri(), pIntent)
+                    .startNotification();
+            return true;
+        }
+        // TODO(b/487776769): Remove all of the following code when the flag is fully ramped up.
         if (!mContext.getResources().getBoolean(R.bool.enable_nfc_url_open_dialog)) {
             return dispatch.tryStartActivity();
         }

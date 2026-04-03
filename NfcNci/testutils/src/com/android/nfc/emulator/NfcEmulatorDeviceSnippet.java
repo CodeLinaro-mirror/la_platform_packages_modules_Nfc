@@ -19,6 +19,7 @@ import android.app.Instrumentation;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.nfc.NfcAdapter;
+import android.nfc.Tag;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
 import android.os.Build;
@@ -380,18 +381,6 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity = (PollingAndOffHostEmulatorActivity) instrumentation.startActivitySync(intent);
     }
 
-    /** Opens emulator activity with Always On Observe Mode. */
-    @Rpc(description = "Opens emulator activity with Always On Observe Mode")
-    public void startAlwaysOnObserveModeEmulatorActivity() {
-        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
-        Intent intent = new Intent(Intent.ACTION_MAIN);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.setClassName(
-                instrumentation.getTargetContext(),
-                        AlwaysOnObserveModeEmulatorActivity.class.getName());
-        mActivity = (AlwaysOnObserveModeEmulatorActivity) instrumentation.startActivitySync(intent);
-    }
-
     /** Open polling loop annotation emulator activity. */
     @Rpc(description = "Open polling loop annotation emulator activity")
     public void startPollingLoopAnnotationEmulatorActivity() {
@@ -471,6 +460,19 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity = (PN532Activity) instrumentation.startActivitySync(intent);
     }
 
+    /** Opens PN532 Activity with TagLoss stress loop enabled. */
+    @Rpc(description = "Opens PN532 Activity with TagLoss stress loop enabled")
+    public void startPN532ActivityForTagLoss() {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClassName(instrumentation.getTargetContext(), PN532Activity.class.getName());
+        intent.putExtra("stress_test_tag_loss", true);
+
+        mActivity = (PN532Activity) instrumentation.startActivitySync(intent);
+    }
+
     /** Opens the Event Listener Activity. */
     @Rpc(description = "Opens the Event Listener Activity")
     public void startEventListenerActivity() {
@@ -513,6 +515,51 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
     public void asyncWaitsForTagDiscovered(String callbackId, String eventName) {
         registerSnippetBroadcastReceiver(
                 callbackId, eventName, PN532Activity.ACTION_TAG_DISCOVERED);
+    }
+
+    /** Registers receiver that waits for TagLostException broadcast from Activity. */
+    @AsyncRpc(description = "Waits for TagLostException broadcast")
+    public void asyncWaitForTagLostException(String callbackId, String eventName) {
+        registerSnippetBroadcastReceiver(
+                callbackId, eventName, PN532Activity.ACTION_TAG_LOST_CATCH);
+    }
+
+    /**
+     * Writes NDEF message to the discovered tag over a background thread and signals python
+     * client on success.
+     */
+    @AsyncRpc(description = "Writes NDEF message to the discovered tag")
+    public void asyncWriteNdefMessage(String callbackId, String eventName, String ndefMessageHex) {
+        new Thread(() -> {
+            try {
+                if (mActivity == null || !(mActivity instanceof PN532Activity)) {
+                    Log.e(TAG, "Activity not available or not PN532Activity");
+                    return;
+                }
+                Tag tag = ((PN532Activity) mActivity).getDiscoveredTag();
+                if (tag == null) {
+                    Log.e(TAG, "No tag discovered to write to");
+                    return;
+                }
+                android.nfc.tech.Ndef ndef = android.nfc.tech.Ndef.get(tag);
+                if (ndef == null) {
+                    Log.e(TAG, "Tag does not support NDEF");
+                    return;
+                }
+                ndef.connect();
+                byte[] msgBytes = HceUtils.hexStringToBytes(ndefMessageHex);
+                android.nfc.NdefMessage ndefMessage = new android.nfc.NdefMessage(msgBytes);
+                ndef.writeNdefMessage(ndefMessage);
+                ndef.close();
+
+                Log.d(TAG, "NDEF Write Success");
+                com.google.android.mobly.snippet.event.SnippetEvent event =
+                    new com.google.android.mobly.snippet.event.SnippetEvent(callbackId, eventName);
+                com.google.android.mobly.snippet.event.EventCache.getInstance().postEvent(event);
+            } catch (Exception e) {
+                Log.e(TAG, "Write NDEF failed", e);
+            }
+        }).start();
     }
 
     /** Enable reader mode with given flags. */

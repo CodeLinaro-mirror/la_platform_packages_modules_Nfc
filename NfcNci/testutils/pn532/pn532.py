@@ -576,7 +576,7 @@ class PN532(Reader):
         rsp = self.get_firmware_version()
         return rsp[0] == 0x32
 
-    def listen_and_serve_ndef(self, tag_emulator, timeout=2.0, max_apdu_exchanges=25):
+    def listen_and_serve_ndef(self, tag_emulator, timeout=2.0, max_apdu_exchanges=25, get_data_timeout=0.5):
         """Acts as a NFC Type 4 Tag and services NDEF requests from a peer.
 
         This high-level method handles the Target initialization and the subsequent
@@ -604,6 +604,7 @@ class PN532(Reader):
         ] + [0x00] * 5
 
         ndef_read_completed = False
+        ndef_write_completed = False
 
         try:
             # Step 1: Initialize PN532 as a Target.
@@ -638,9 +639,13 @@ class PN532(Reader):
                     if offset > 0:
                         ndef_read_completed = True
 
+                if (tag_emulator.selected_file == tag_emulator.FID_NDEF and
+                    len(data) >= 4 and data[1] == 0xD6):
+                    ndef_write_completed = True
+
                 # Wait for the next APDU from the peer.
                 # A 0.5s timeout is sufficient for standard Android presence checks.
-                data = self.tg_get_data(timeout=0.5)
+                data = self.tg_get_data(timeout=get_data_timeout)
 
             except RuntimeError:
                 # Expected: Peer stopped sending APDUs (Normal end of transaction).
@@ -650,7 +655,7 @@ class PN532(Reader):
                 self.log.error("Unexpected error during NDEF emulation: %s", e)
                 break
 
-        return ndef_read_completed
+        return ndef_read_completed or ndef_write_completed
 
     # PN532 defined commands
 

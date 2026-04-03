@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
+import android.app.PendingIntent;
 import android.app.backup.BackupManager;
 import android.content.ApexEnvironment;
 import android.content.Context;
@@ -267,7 +268,7 @@ public class NfcInjector {
     public ISecureElementService connectToSeService() throws RemoteException {
         SeServiceManager manager = SeFrameworkInitializer.getSeServiceManager();
         if (manager == null) {
-            Log.e(TAG, "SEServiceManager is null");
+            Log.e(TAG, "connectToSeService: SEServiceManager is null");
             return null;
         }
         return ISecureElementService.Stub.asInterface(
@@ -403,6 +404,12 @@ public class NfcInjector {
     public NfcTagAllowNotification createNfcTagAllowNotification(
             Context context, List<String> appNames, boolean allow) {
         return new NfcTagAllowNotification(context, appNames, allow);
+    }
+
+    /** Creates a NfcWeblinkNotification object */
+    public NfcWeblinkNotification createNfcWeblinkNotification(
+            Context context, String uri, PendingIntent launchIntent) {
+        return new NfcWeblinkNotification(context, uri, launchIntent);
     }
 
 }
