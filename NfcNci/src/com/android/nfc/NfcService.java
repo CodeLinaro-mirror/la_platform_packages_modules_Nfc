@@ -1438,9 +1438,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         mIsAlwaysOnSupported = mDeviceConfigFacade.getNfccAlwaysOnAllowed();
 
-        mIsTagAppPrefSupported = mIsRWCapable
-                && mContext.getResources().getBoolean(R.bool.tag_intent_app_pref_supported);
-
+        mIsTagAppPrefSupported =
+            mContext.getResources().getBoolean(R.bool.tag_intent_app_pref_supported);
         mTagAppBlockListHash = mPrefs.getInt(PREF_TAG_APP_BLOCK_LIST_HASH,
                 PREF_TAG_APP_BLOCK_LIST_HASH_DEFAULT);
 

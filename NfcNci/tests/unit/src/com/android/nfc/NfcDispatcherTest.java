@@ -141,8 +141,6 @@ public final class NfcDispatcherTest {
     DeviceConfigFacade mDeviceConfigFacade;
     @Mock
     NfcTagAllowNotification mNfcTagAllowNotification;
-    @Mock
-    NfcWeblinkNotification mNfcWeblinkNotification;
 
     @Before
     public void setUp() throws PackageManager.NameNotFoundException {
@@ -151,10 +149,8 @@ public final class NfcDispatcherTest {
                 .mockStatic(NfcStatsLog.class)
                 .mockStatic(android.nfc.Flags.class)
                 .mockStatic(com.android.nfc.module.flags.Flags.class)
-                .mockStatic(com.android.nfc.module.nonexported.flags.Flags.class)
                 .mockStatic(NfcAdapter.class)
                 .mockStatic(Ndef.class)
-                .mockStatic(PendingIntent.class)
                 .mockStatic(ForegroundUtils.class)
                 .mockStatic(NfcWifiProtectedSetup.class)
                 .strictness(Strictness.LENIENT)
@@ -183,8 +179,6 @@ public final class NfcDispatcherTest {
         when(mNfcInjector.createAtomicBoolean()).thenReturn(mAtomicBoolean);
         when(mNfcInjector.createNfcTagAllowNotification(any(), any(), eq(true)))
                 .thenReturn(mNfcTagAllowNotification);
-        when(mNfcInjector.createNfcWeblinkNotification(any(), any(), any()))
-                .thenReturn(mNfcWeblinkNotification);
         when(com.android.nfc.module.flags.Flags.nfcstack26q2Updates()).thenReturn(false);
 
         mNfcDispatcher = new NfcDispatcher(mockContext,
@@ -1214,42 +1208,6 @@ public final class NfcDispatcherTest {
         // Verify the notification indicates the app is not allowed
         verify(mNfcInjector).createNfcTagAllowNotification(any(), any(), eq(false));
         verify(mNfcTagAllowNotification).startNotification();
-    }
-
-    @Test
-    public void testShowWebLinkNotification() {
-        when(com.android.nfc.module.nonexported.flags.Flags.ndefWeblinkNotification())
-                .thenReturn(true);
-        PendingIntent mockPendingIntent = mock(PendingIntent.class);
-        when(PendingIntent.getActivity(any(), anyInt(), any(), anyInt()))
-                .thenReturn(mockPendingIntent);
-
-        Tag tag = mock(Tag.class);
-        NdefMessage ndefMessage = mock(NdefMessage.class);
-        NdefRecord ndefRecord = NdefRecord.createUri("https://www.example.com");
-        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
-        NfcDispatcher.DispatchInfo dispatchInfo = new NfcDispatcher
-                .DispatchInfo(mockContext, mNfcInjector, tag, ndefMessage);
-
-        mNfcDispatcher.showWebLinkConfirmation(dispatchInfo);
-
-        verify(mNfcInjector).createNfcWeblinkNotification(any(), any(), any());
-        verify(mNfcWeblinkNotification).startNotification();
-    }
-
-    @Test
-    public void testShowWebLinkConfirmation_FlagOff() {
-        when(com.android.nfc.module.nonexported.flags.Flags.ndefWeblinkNotification())
-                .thenReturn(false);
-        when(mResources.getBoolean(R.bool.enable_nfc_url_open_dialog)).thenReturn(false);
-
-        NfcDispatcher.DispatchInfo dispatchInfo = mock(NfcDispatcher.DispatchInfo.class);
-        when(dispatchInfo.getUri()).thenReturn("https://www.example.com");
-
-        mNfcDispatcher.showWebLinkConfirmation(dispatchInfo);
-
-        verify(dispatchInfo).tryStartActivity();
-        verify(mNfcInjector, never()).createNfcWeblinkNotification(any(), any(), any());
     }
 
     private ResolveInfo createResolveInfo(String packageName, String name, int uid) {

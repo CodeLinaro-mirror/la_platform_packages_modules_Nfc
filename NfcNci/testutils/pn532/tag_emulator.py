@@ -34,10 +34,6 @@ class Type4Tag:
                 "D1010C5504676F6F676C652E636F6D2F"
             )
 
-        self.ndef_file_buffer = bytearray(
-            len(self.ndef_message).to_bytes(2, 'big') + self.ndef_message
-        )
-
         # Capability Container (CC) file
         # 00 0F (CCLEN)
         # 20 (Mapping Version 2.0)
@@ -130,7 +126,7 @@ class Type4Tag:
 
             elif self.selected_file == self.FID_NDEF:
                 # NDEF File structure: [Len (2 bytes)] [NDEF Message]
-                file_content = self.ndef_file_buffer
+                file_content = len(self.ndef_message).to_bytes(2, 'big') + self.ndef_message
                 if offset >= len(file_content):
                     return bytearray.fromhex("6B00")
 
@@ -141,23 +137,6 @@ class Type4Tag:
 
             self.log.warning("Read Binary on unknown file")
             return bytearray.fromhex("6982") # Security status not satisfied or file valid
-
-        # UPDATE BINARY
-        if ins == self.INS_UPDATE_BINARY:
-            offset = (p1 << 8) | p2
-            lc = apdu[4] if len(apdu) > 4 else 0
-            data = apdu[5 : 5 + lc]
-
-            if self.selected_file == self.FID_NDEF:
-                if offset + lc > len(self.ndef_file_buffer):
-                    self.ndef_file_buffer += bytearray(offset + lc - len(self.ndef_file_buffer))
-
-                self.ndef_file_buffer[offset : offset + lc] = data
-                self.log.info("Updating NDEF File: offset=%d, len=%d", offset, lc)
-                return bytearray.fromhex("9000")
-
-            self.log.warning("Update Binary on unknown/unsupported file")
-            return bytearray.fromhex("6982")
 
         self.log.warning("Unknown Command: %s", apdu.hex())
         return bytearray.fromhex("6D00") # Instruction code not supported or invalid

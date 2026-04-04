@@ -158,14 +158,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver android:name=".NfcWeblinkReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.android.nfc.ACTION_WEBLINK" />
-                <action android:name="com.android.nfc.ACTION_WEBLINK_CANCEL" />
-            </intent-filter>
-        </receiver>
-
         <service android:name=".handover.PeripheralHandoverService"
         />
     </application>

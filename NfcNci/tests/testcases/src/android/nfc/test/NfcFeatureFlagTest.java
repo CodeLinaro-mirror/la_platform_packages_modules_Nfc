@@ -29,6 +29,7 @@ import android.content.res.Resources;
 import android.nfc.NfcAdapter;
 import android.os.SystemProperties;
 import android.text.TextUtils;
+import android.util.Log;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -48,17 +49,16 @@ public final class NfcFeatureFlagTest {
     private Context mContext;
     private NfcAdapter mNfcAdapter;
     private boolean mNfcSupported;
-    private boolean mNfcReaderModeSupported;
 
     @Before
     public void setUp() {
         mContext = InstrumentationRegistry.getTargetContext();
         PackageManager pm = mContext.getPackageManager();
-
-        mNfcSupported = pm.hasSystemFeature(PackageManager.FEATURE_NFC_ANY);
-        if (!mNfcSupported) return;
-        mNfcReaderModeSupported = pm.hasSystemFeature(PackageManager.FEATURE_NFC);
-
+        if (!pm.hasSystemFeature(PackageManager.FEATURE_NFC_ANY)) {
+            mNfcSupported = false;
+            return;
+        }
+        mNfcSupported = true;
         mNfcAdapter = NfcAdapter.getDefaultAdapter(mContext);
         Assert.assertNotNull(mNfcAdapter);
     }
@@ -131,11 +131,7 @@ public final class NfcFeatureFlagTest {
     @Test
     public void testIsTagIntentAppPreferenceSupported() throws Exception {
         if (!mNfcSupported) return;
-        if (mNfcReaderModeSupported) {
-            assertThat(getNfcResourceBooleanByName("tag_intent_app_pref_supported"))
-                    .isEqualTo(mNfcAdapter.isTagIntentAppPreferenceSupported());
-        } else {
-            assertFalse(mNfcAdapter.isTagIntentAppPreferenceSupported());
-        }
+        assertThat(getNfcResourceBooleanByName("tag_intent_app_pref_supported"))
+                .isEqualTo(mNfcAdapter.isTagIntentAppPreferenceSupported());
     }
 }
