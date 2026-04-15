@@ -1571,8 +1571,11 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
       mProtocol = NFC_PROTOCOL_UNKNOWN;
       if (!mIsReselecting) {
         resetTechnologies();
+        notifyTagDiscovered(false);
+      } else {
+        LOG(ERROR) << StringPrintf(
+            "%s: Reselect Ongoing, Skip notifyTagDiscovered", fn);
       }
-      notifyTagDiscovered(false);
       break;
 
     case NFA_READ_CPLT_EVT: {

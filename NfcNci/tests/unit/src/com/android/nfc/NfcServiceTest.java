@@ -50,6 +50,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -115,7 +116,6 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.test.TestLooper;
-import android.platform.test.annotations.DisableFlags;
 import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
@@ -238,6 +238,8 @@ public final class NfcServiceTest {
                 .mockStatic(android.permission.flags.Flags.class)
                 .mockStatic(NfcInjector.class)
                 .mockStatic(NativeNfcManager.class)
+                .mockStatic(android.provider.Settings.Secure.class)
+                .mockStatic(com.android.nfc.module.flags.Flags.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         MockitoAnnotations.initMocks(this);
@@ -420,6 +422,7 @@ public final class NfcServiceTest {
 
         // onRfDiscoveryEvent(false) calls StopPresenceChecking
         mDeviceHostListener.getValue().onRfDiscoveryEvent(false);
+        mLooper.dispatchAll();
 
         // Verify that onTagLost was called on the reader mode callback
         verify(readerParams.callback).onTagLost(mockTag);
@@ -1735,6 +1738,114 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void testOnUidToBackground_unlinkThrows() throws RemoteException {
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        mLooper.dispatchAll();
+        IBinder binder = mock(IBinder.class);
+        doThrow(new java.util.NoSuchElementException()).when(binder).unlinkToDeath(any(), anyInt());
+
+        NfcService.DiscoveryTechParams discoveryTechParams =
+                mNfcService.new DiscoveryTechParams();
+        discoveryTechParams.uid = 1;
+        discoveryTechParams.binder = binder;
+        mNfcService.mDiscoveryTechParams = discoveryTechParams;
+
+        mNfcService.onUidToBackground(1);
+
+        verify(binder).unlinkToDeath(any(), anyInt());
+        verify(mDeviceHost).resetDiscoveryTech();
+        Assert.assertNull(mNfcService.mDiscoveryTechParams);
+    }
+
+    @Test
+    public void testUpdateDiscoveryTechnology_resetTech() throws RemoteException {
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(NfcInjector.isPrivileged(anyInt())).thenReturn(true);
+
+        IBinder binder = mock(IBinder.class);
+        NfcService.DiscoveryTechParams discoveryTechParams =
+                mNfcService.new DiscoveryTechParams();
+        discoveryTechParams.uid = 1;
+        discoveryTechParams.binder = binder;
+        mNfcService.mDiscoveryTechParams = discoveryTechParams;
+
+        mNfcService.mNfcAdapter.updateDiscoveryTechnology(binder,
+                NfcAdapter.FLAG_USE_ALL_TECH, NfcAdapter.FLAG_USE_ALL_TECH, PKG_NAME);
+
+        verify(binder).unlinkToDeath(any(), anyInt());
+        verify(mDeviceHost).resetDiscoveryTech();
+        Assert.assertNull(mNfcService.mDiscoveryTechParams);
+    }
+
+    @Test
+    public void testUpdateDiscoveryTechnology_resetTech_unlinkThrows() throws RemoteException {
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(NfcInjector.isPrivileged(anyInt())).thenReturn(true);
+
+        IBinder binder = mock(IBinder.class);
+        doThrow(new java.util.NoSuchElementException()).when(binder).unlinkToDeath(any(), anyInt());
+
+        NfcService.DiscoveryTechParams discoveryTechParams =
+                mNfcService.new DiscoveryTechParams();
+        discoveryTechParams.uid = 1;
+        discoveryTechParams.binder = binder;
+        mNfcService.mDiscoveryTechParams = discoveryTechParams;
+
+        mNfcService.mNfcAdapter.updateDiscoveryTechnology(binder,
+                NfcAdapter.FLAG_USE_ALL_TECH, NfcAdapter.FLAG_USE_ALL_TECH, PKG_NAME);
+
+        verify(binder).unlinkToDeath(any(), anyInt());
+        verify(mDeviceHost).resetDiscoveryTech();
+        Assert.assertNull(mNfcService.mDiscoveryTechParams);
+    }
+
+    @Test
+    public void testUpdateDiscoveryTechnology_setTech() throws RemoteException {
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(NfcInjector.isPrivileged(anyInt())).thenReturn(true);
+
+        IBinder binder = mock(IBinder.class);
+        IBinder newBinder = mock(IBinder.class);
+        NfcService.DiscoveryTechParams discoveryTechParams =
+                mNfcService.new DiscoveryTechParams();
+        discoveryTechParams.uid = 1;
+        discoveryTechParams.binder = binder;
+        mNfcService.mDiscoveryTechParams = discoveryTechParams;
+
+        mNfcService.mNfcAdapter.updateDiscoveryTechnology(newBinder,
+                0x01, 0x01, PKG_NAME);
+
+        verify(binder).unlinkToDeath(any(), anyInt());
+        verify(newBinder).linkToDeath(any(), anyInt());
+        Assert.assertNotNull(mNfcService.mDiscoveryTechParams);
+        Assert.assertEquals(newBinder, mNfcService.mDiscoveryTechParams.binder);
+    }
+
+    @Test
+    public void testUpdateDiscoveryTechnology_setTech_unlinkThrows() throws RemoteException {
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+        when(NfcInjector.isPrivileged(anyInt())).thenReturn(true);
+
+        IBinder binder = mock(IBinder.class);
+        doThrow(new java.util.NoSuchElementException()).when(binder).unlinkToDeath(any(), anyInt());
+        IBinder newBinder = mock(IBinder.class);
+
+        NfcService.DiscoveryTechParams discoveryTechParams =
+                mNfcService.new DiscoveryTechParams();
+        discoveryTechParams.uid = 1;
+        discoveryTechParams.binder = binder;
+        mNfcService.mDiscoveryTechParams = discoveryTechParams;
+
+        mNfcService.mNfcAdapter.updateDiscoveryTechnology(newBinder,
+                0x01, 0x01, PKG_NAME);
+
+        verify(binder).unlinkToDeath(any(), anyInt());
+        verify(newBinder).linkToDeath(any(), anyInt());
+        Assert.assertNotNull(mNfcService.mDiscoveryTechParams);
+        Assert.assertEquals(newBinder, mNfcService.mDiscoveryTechParams.binder);
+    }
+
+    @Test
     public void testOnWlcData() throws RemoteException {
         mNfcService.mIsWlcCapable = true;
         INfcWlcStateListener listener = mock(INfcWlcStateListener.class);
@@ -2354,6 +2465,30 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void testIsNfcSecureEnabled_UserChanged() throws RemoteException {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        int currentUser = ActivityManager.getCurrentUser();
+
+        // Simulate user switch to change mUserId to a different user
+        BroadcastReceiver receiver = mGlobalReceiver.getValue();
+        Intent intent = new Intent(Intent.ACTION_USER_SWITCHED);
+        intent.putExtra(Intent.EXTRA_USER_HANDLE, currentUser + 1);
+        receiver.onReceive(mApplication, intent);
+
+        mNfcService.mIsSecureNfcCapable = true;
+        when(mDeviceConfigFacade.getDefaultSecureNfcState()).thenReturn(false);
+        when(mPreferences.getBoolean(eq("secure_nfc_on_" + currentUser), anyBoolean()))
+                .thenReturn(true);
+        clearInvocations(mPreferences, mDeviceHost);
+
+        boolean result = adapterService.isNfcSecureEnabled();
+
+        assertThat(result).isTrue();
+        verify(mPreferences).getBoolean(eq("secure_nfc_on_" + currentUser), anyBoolean());
+        verify(mDeviceHost).setNfcSecure(true);
+    }
+
+    @Test
     public void testIsReaderOptionSupported() {
         NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
         mNfcService.mReaderOptionCapable = true;
@@ -2804,6 +2939,7 @@ public final class NfcServiceTest {
 
         // Act
         listener.onRfDiscoveryEvent(false);
+        mLooper.dispatchAll();
 
         // Assert
         verify(mockTagEndpoint).stopPresenceChecking(false);
@@ -2830,6 +2966,7 @@ public final class NfcServiceTest {
 
         // Act
         listener.onTagRfDiscovered(false);
+        mLooper.dispatchAll();
 
         // Assert
         verify(mockTagEndpoint).stopPresenceChecking(false);
@@ -2846,5 +2983,86 @@ public final class NfcServiceTest {
 
         // Assert
         verify(mockTagEndpoint, never()).stopPresenceChecking(anyBoolean());
+    }
+
+    @Test
+    public void testMsg_Ndef_Tag_GestureExchange() throws RemoteException {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+
+        android.nfc.IReaderCallback gestureCallback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(gestureCallback);
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.ISO_DEP);
+        when(tagEndpoint.getUid()).thenReturn(new byte[]{0x01, 0x02});
+        when(tagEndpoint.getTechList()).thenReturn(new int[]{TagTechnology.ISO_DEP});
+        when(tagEndpoint.getTechExtras()).thenReturn(new Bundle[]{new Bundle()});
+        when(tagEndpoint.getHandle()).thenReturn(1);
+
+        byte[] respData = new byte[]{(byte) 0x90, 0x00};
+        when(tagEndpoint.transceive(any(), eq(false), any())).thenReturn(respData);
+
+        msg.obj = tagEndpoint;
+
+        mNfcService.mGestureExchangeEnabled = true;
+        when(android.provider.Settings.Secure.getString(
+                any(), eq(NfcService.GESTURE_EXCHANGE_COMPONENT_SETTINGS_KEY)))
+                .thenReturn("some_component");
+        mNfcService.mCookieUpToDate = -1;
+
+        handler.handleMessage(msg);
+
+        Assert.assertNotEquals(-1, mNfcService.mCookieUpToDate);
+        verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(), any());
+    }
+
+    @Test
+    public void testMsg_Ndef_Tag_GestureExchange_CookieAlreadySet() throws RemoteException {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState.set(NfcAdapter.STATE_ON);
+
+        android.nfc.IReaderCallback gestureCallback = mock(android.nfc.IReaderCallback.class);
+        mNfcService.mNfcAdapter.registerGestureExchangeCallback(gestureCallback);
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.ISO_DEP);
+        when(tagEndpoint.getUid()).thenReturn(new byte[]{0x01, 0x02});
+        when(tagEndpoint.getTechList()).thenReturn(new int[]{TagTechnology.ISO_DEP});
+        when(tagEndpoint.getTechExtras()).thenReturn(new Bundle[]{new Bundle()});
+        when(tagEndpoint.getHandle()).thenReturn(1);
+
+        byte[] respData = new byte[]{(byte) 0x90, 0x00};
+        when(tagEndpoint.transceive(any(), eq(false), any())).thenReturn(respData);
+
+        msg.obj = tagEndpoint;
+
+        mNfcService.mGestureExchangeEnabled = true;
+        when(android.provider.Settings.Secure.getString(
+                any(), eq(NfcService.GESTURE_EXCHANGE_COMPONENT_SETTINGS_KEY)))
+                .thenReturn("some_component");
+        mNfcService.mCookieUpToDate = 12345L;
+
+        handler.handleMessage(msg);
+
+        Assert.assertNotEquals(12345L, mNfcService.mCookieUpToDate);
+        Assert.assertTrue(mNfcService.mCookieUpToDate >= 0);
+        verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(), any());
+    }
+
+    @Test
+    public void testGetT4tNfceeAid() {
+        byte[] aidBytes = {(byte) 0xD2, 0x76, 0x00, 0x00, (byte) 0x85, 0x01, 0x01};
+        when(mDeviceHost.getT4tNfceeAid()).thenReturn(aidBytes);
+        String aid = mNfcService.getT4tNfceeAid();
+        assertThat(aid).isEqualTo("D2760000850101");
+
+        when(mDeviceHost.getT4tNfceeAid()).thenReturn(null);
+        aid = mNfcService.getT4tNfceeAid();
+        assertThat(aid).isNull();
     }
 }
