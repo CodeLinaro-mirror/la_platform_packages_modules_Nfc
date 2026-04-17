@@ -1027,6 +1027,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 String pollingLoopFilter, boolean autoTransact) throws RemoteException {
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
+            if (pollingLoopFilter.equalsIgnoreCase("6A01CF0000")
+                    && !mAidCache.isDefaultOrAssociatedWalletPackage(service.getPackageName(),
+                    userId)) {
+                Log.e(TAG, "registerPollingLoopFilterForService: " + service.getPackageName()
+                        + " isn't default wallet, can't register ignore frame");
+                return false;
+            }
             if (!isServiceRegistered(userId, service)) {
                 Log.e(TAG, "registerPollingLoopFilterForService: service (" + service
                         + ") isn't registered for user " + userId);
@@ -1109,6 +1116,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 String pollingLoopPatternFilter, boolean autoTransact) throws RemoteException {
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
+            if (pollingLoopPatternFilter.equalsIgnoreCase("6A01CF0000")
+                    && !mAidCache.isDefaultOrAssociatedWalletPackage(service.getPackageName(),
+                    userId)) {
+                Log.e(TAG, "registerPollingLoopPatternFilterForService: " + service.getPackageName()
+                        + " isn't default wallet, can't register ignore frame");
+                return false;
+            }
             if (!isServiceRegistered(userId, service)) {
                 Log.e(TAG, "registerPollingLoopPatternFilterForService: service (" + service
                         + ") isn't registed for user " + userId);
@@ -1989,7 +2003,17 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     public void onObserveModeStateChange(boolean enabled) {
         mHostEmulationManager.onObserveModeStateChange(enabled);
         if (android.nfc.Flags.nfcEventListener()) {
-            callNfcEventCallbacks(listener -> listener.onObserveModeStateChanged(enabled));
+            callNfcEventCallbacks(listener -> {
+                if (NfcService.getInstance().isObserveModeAlwaysOnEnabled()) {
+                    // If external app did not enable observe mode, don't send them any observe
+                    // mode state enabled callbacks.
+                    if (!enabled || mHostEmulationManager.isAppRequestedObserveModeEnabled()) {
+                        listener.onObserveModeStateChanged(enabled);
+                    }
+                } else {
+                    listener.onObserveModeStateChanged(enabled);
+                }
+            });
         }
     }
 
@@ -2098,5 +2122,31 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         } else {
             Log.e("CardEmulationManager", "HostEmulationManager is not available.");
         }
+    }
+
+    /**
+     * Set the always on observe mode state.
+     */
+    public void setObserveModeAlwaysOn(boolean enable) {
+        mHostEmulationManager.setObserveModeAlwaysOn(enable);
+    }
+
+    /**
+     * Return the app requested observe mode state.
+     * If {@link NfcService#isObserveModeAlwaysOnEnabled()} is {@code false}, then this returns
+     * {@code true} because always on mode is off and observe mode state is explicitly controlled
+     * by apps.
+     */
+    public boolean isAppRequestedObserveModeEnabled() {
+        return mHostEmulationManager.isAppRequestedObserveModeEnabled();
+    }
+
+    /**
+     * Store the app requested observe mode state.
+     *
+     * Only used when {@link NfcService#isObserveModeAlwaysOnEnabled()} is {@code true}.
+     */
+    public boolean setAppRequestedObserveMode(boolean enable) {
+        return mHostEmulationManager.setAppRequestedObserveMode(enable);
     }
 }
