@@ -310,7 +310,8 @@ bool RoutingManager::isTypeATypeBTechSupportedInEe(tNFA_HANDLE eeHandle) {
   }
 
   LOG(WARNING) << StringPrintf(
-      "%s:  Route does not support A/B, using DH as default", fn);
+      "%s:  Route %02X does not support A/B, using DH as default", fn,
+      eeHandle);
   return false;
 }
 
@@ -328,9 +329,18 @@ bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
                                    int route, int aidInfo, int power) {
   static const char fn[] = "RoutingManager::addAidRouting";
   uint8_t powerState = 0x01;
+  int defaultAidRoute = mDefaultEe;
 
   if (route != NFC_DH_ID &&
       !isTypeATypeBTechSupportedInEe(route | NFA_HANDLE_GROUP_EE)) {
+    // If default AID route is DH no need to add aid explicitly
+    // as all AIDs will be routed to DH
+    if (defaultAidRoute == NFC_DH_ID) {
+      LOG(DEBUG) << StringPrintf(
+          "%s:  defaultAidRoute=%02x, Skip fallback to DH", fn,
+          defaultAidRoute);
+      return true;
+    }
     route = NFC_DH_ID;
     power = 0x11;
   }
@@ -951,8 +961,12 @@ void RoutingManager::updateDefaultProtocolRoute() {
     SyncEventGuard guard(mRoutingEvent);
     tNFA_PROTOCOL_MASK protoMask = NFA_PROTOCOL_MASK_T3T;
     if (mDefaultEe == NFC_DH_ID) {
-      nfaStat =
+      if ((mHostListenTechMask & NFA_TECHNOLOGY_MASK_F) != 0) {
+        nfaStat =
           NFA_EeSetDefaultProtoRouting(NFC_DH_ID, protoMask, 0, 0, 0, 0, 0);
+      } else {
+        return;
+      }
     } else {
       nfaStat = NFA_EeSetDefaultProtoRouting(
           mDefaultEe, protoMask, 0, 0, mSecureNfcEnabled ? 0 : protoMask,

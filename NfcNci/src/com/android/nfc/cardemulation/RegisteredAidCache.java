@@ -1495,7 +1495,8 @@ public class RegisteredAidCache {
             // Associated wallet role package may not have any CE service (only for ability to
             // toggle observe mode), so add these packages directly here.
             if (shareRolePriorityPackageName != null) {
-                Log.v(TAG, "Found associated role package: " + shareRolePriorityPackageName);
+                Log.v(TAG, "generateAssociatedRoleServicesLocked: Found associated role package: "
+                        + shareRolePriorityPackageName);
                 mAssociatedRolePackageNames.add(shareRolePriorityPackageName);
             }
         } catch (PackageManager.NameNotFoundException e) {
@@ -1516,7 +1517,9 @@ public class RegisteredAidCache {
                 // Associated wallet role package may not have any CE service (only for ability to
                 // toggle observe mode), so add these packages directly here.
                 if (shareRolePriorityPackageName != null) {
-                    Log.v(TAG, "Found associated role package: " + shareRolePriorityPackageName);
+                    Log.v(TAG,
+                            "generateAssociatedRoleServicesLocked: Found associated role package: "
+                            + shareRolePriorityPackageName);
                     mAssociatedRolePackageNames.add(shareRolePriorityPackageName);
                 }
             } catch (PackageManager.NameNotFoundException e) {
@@ -1534,14 +1537,18 @@ public class RegisteredAidCache {
                 if (shareRolePriorityPackageName == null) {
                     if (pm.checkSignatures(mDefaultWalletHolderPackageName, servicePkg)
                             == PackageManager.SIGNATURE_MATCH) {
-                        Log.v(TAG, "Found associated role service: " + service);
+                        Log.v(TAG, "generateAssociatedRoleServicesLocked: "
+                                + "Found associated role service: "
+                                + service);
                         mAssociatedRoleServices.add(service);
                         mAssociatedRolePackageNames.add(servicePkg);
                     }
                 } else if (servicePkg.equals(shareRolePriorityPackageName)) {
                     // If there are CE services from the associated wallet role package, add them as
                     // well.
-                    Log.v(TAG, "Found associated role service: " + service);
+                    Log.v(TAG, "generateAssociatedRoleServicesLocked: "
+                            + "Found associated role service: "
+                            + service);
                     mAssociatedRoleServices.add(service);
                 }
             }
