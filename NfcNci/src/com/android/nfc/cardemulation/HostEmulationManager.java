@@ -1770,7 +1770,7 @@ public class HostEmulationManager {
         @Override
         public void onBindingDied(ComponentName name) {
             Log.i(TAG, "onBindingDied: " + name);
-            unbindServiceIfNeededLocked();
+            unbindServiceIfNeededLocked(/* force */ true);
         }
 
         @Override
