@@ -37,6 +37,7 @@ import logging
 import re
 import ssl
 import sys
+import threading
 import time
 
 from android.platform.test.annotations import ApiTest
@@ -53,6 +54,7 @@ _LOG = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 try:
     import pn532
+    from pn532 import tag_emulator
     from pn532.nfcutils import (
         parse_protocol_params,
         create_select_apdu,
@@ -1732,6 +1734,7 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
                 "*** TEST END: " + self.current_test_info.name + " ***")
         if hasattr(self, 'pn532'):
             self.pn532.reset_buffers()
+            self.pn532.chip_reset()
             self.pn532.mute()
         if hasattr(self, "emulator"):
             self.emulator.services.create_output_excerpts_all(self.current_test_info)
@@ -1814,6 +1817,189 @@ class CtsNfcHceMultiDeviceTestCases(base_test.BaseTestClass):
         # Reset listen tech back.
         self.emulator.nfc_emulator.resetListenTech()
 
+    def test_ndef_read(self):
+        asserts.skip("Skipped due to hardware timeout flakiness (b/498085081)")
+        """Tests that the Android NDEF protocol stack can successfully read a Type 4 Tag.
+
+        Test Steps:
+        1. Enable reader mode on the emulator with NDEF checking enabled.
+        2. Set up a handler to catch the 'TagDiscovered' event.
+        3. Use PN532 to listen and serve NDEF requests using a Type 4 Tag emulator.
+        4. Verify that the NDEF exchange was completed and the tag was discovered.
+
+        Verifies:
+        1. The Android NCI stack completes the full NDEF read sequence.
+        2. The application layer receives the Tag object.
+        """
+
+        # Skip the test if reader mode is not supported
+        asserts.skip_if(not self.emulator.nfc_emulator.isNfcSupported(),
+                        "Reader mode is not supportedd")
+
+        # Constants for polling limits
+        _MAX_INIT_RETRIES = 5
+
+        # Setup Reader Mode on the Android device.
+        # 0x1 (NFC-A) | 0x10 (Barcode/NDEF)
+        _NFC_TECH_A_POLLING_ON_WITH_NDEF = 0x1 | 0x10
+        self.emulator.nfc_emulator.startPN532Activity()
+        self.emulator.nfc_emulator.enableReaderMode(_NFC_TECH_A_POLLING_ON_WITH_NDEF)
+
+        # Register handler for the application-level callback.
+        tag_discovered_handler = self.emulator.nfc_emulator.asyncWaitsForTagDiscovered(
+            "TagDiscovered"
+        )
+
+        # Run the PN532 NDEF service logic.
+        tag = tag_emulator.Type4Tag()
+        _LOG.info("PN532 is listening for NDEF read requests...")
+
+        ndef_read_success = False
+        # We allow a few retries for the physical RF sync between phone and PN532.
+        for attempt in range(_MAX_INIT_RETRIES):
+            if self.pn532.listen_and_serve_ndef(tag, timeout=2.0):
+                ndef_read_success = True
+                break
+
+        # Asserts that the NDEF data exchange was fully completed without NCI/JNI stack interruption.
+        asserts.assert_true(
+            ndef_read_success,
+            "Android NFC stack interrupted or failed the NDEF reading process."
+        )
+
+        # Asserts that the system properly dispatched the parsed Tag object to the application.
+        tag_event = tag_discovered_handler.waitAndGet("TagDiscovered", _NFC_TIMEOUT_SEC)
+        asserts.assert_is_not_none(
+            tag_event,
+            "Emulator app did not receive the TagDiscovered event after NDEF exchange."
+        )
+
+    def test_pn532_tag_presence_check(self):
+        asserts.skip("Skipped due to hardware timeout flakiness (b/498085081)")
+        """Tests that the Android NFC stack correctly handles Tag detachment.
+
+        Test Steps:
+        1. Start PN532 activity with TagLoss stress loop flag enabled.
+        2. Enable reader mode on the emulator.
+        3. Establish emulation and serve exactly 10 APDUs sequentially.
+        4. Mute the PN532 RF field to simulate sudden tag removal.
+        5. Verify that the Android snippet caught the TagLostException.
+
+        Verifies:
+        1. The Android application layers can catch TagLostException without system crash.
+        """
+
+        # Skip the test if reader mode is not supported
+        asserts.skip_if(not self.emulator.nfc_emulator.isNfcSupported(),
+                        "Reader mode is not supportedd")
+
+        # 1. Setup Activity with TagLoss Transceive Loop triggered
+        self.emulator.nfc_emulator.startPN532ActivityForTagLoss()
+
+        # 0x1 indicates NFC-A technology
+        self.emulator.nfc_emulator.enableReaderMode(0x1)
+
+        # Register handler for the loss event catch
+        tag_lost_handler = self.emulator.nfc_emulator.asyncWaitForTagLostException(
+            "TagLostException"
+        )
+
+        # 2. Establish initial emulation connection
+        tag = tag_emulator.Type4Tag()
+        _LOG.info("Establishing connection and starting reading loop...")
+
+        # 3. Serve 10 APDUs then return.
+        # Blocks sequential execution until 10 exchanges are served.
+        self.pn532.listen_and_serve_ndef(tag, max_apdu_exchanges=10)
+
+        # 4. Simulate sudden tag removal
+        _LOG.info("Muting PN532 RF modulation to simulate sudden removal...")
+        # Java-side is still waiting to transceive 11th package
+        self.pn532.mute()
+
+        # 5. Verify exception caught inside snippet
+        _LOG.info("Waiting for Android to trigger or handle TagLostException...")
+        lost_event = tag_lost_handler.waitAndGet("TagLostException", _NFC_TIMEOUT_SEC)
+
+        asserts.assert_is_not_none(
+            lost_event,
+            "Android failed to trigger TagLostException upon tag mute/removal."
+        )
+
+    def test_ndef_write(self):
+        asserts.skip("Skipped due to hardware timeout flakiness (b/498085081)")
+        """Tests that the Android NFC stack can correctly write NDEF message to an emulated Type 4 Tag.
+
+        Test Steps:
+        1. Start PN532 Activity on Android Emulator.
+        2. Enable reader mode on Emulator.
+        3. Establish emulation connection via Type4Tag.
+        4. Trigger async NDEF write from Android snippet.
+        5. Re-enter the emulation loop to process the write commands.
+        6. Verify the write was successful from both Python Tag state and Android snippet event.
+
+        Verifies:
+        1. Android can send UPDATE_BINARY commands over NFC.
+        2. NDEF message is persisted in Type4Tag's buffer.
+        """
+
+        # Skip the test if reader mode is not supported
+        asserts.skip_if(not self.emulator.nfc_emulator.isNfcSupported(),
+                        "Reader mode is not supportedd")
+
+        _NFC_TECH_A_POLLING_ON_WITH_NDEF = 0x1 | 0x10
+
+        _LOG.info("Step 1: Starting PN532 Activity...")
+        self.emulator.nfc_emulator.startPN532Activity()
+        self.emulator.nfc_emulator.enableReaderMode(_NFC_TECH_A_POLLING_ON_WITH_NDEF)
+
+        tag_discovered_handler = self.emulator.nfc_emulator.asyncWaitsForTagDiscovered("TagDiscovered")
+
+        tag = tag_emulator.Type4Tag()
+        _LOG.info("Step 2: Starting background tag emulation thread...")
+        def listen_worker():
+            _LOG.info("Step 4 (Thread): Listening for NDEF APDUs from Android (Discovery & Write)...")
+            self.pn532.listen_and_serve_ndef(tag, get_data_timeout=5.0)
+
+        listen_thread = threading.Thread(target=listen_worker)
+        listen_thread.start()
+
+        _LOG.info("Waiting for Android to discover the tag...")
+        tag_discovered_handler.waitAndGet("TagDiscovered", timeout=_NFC_TIMEOUT_SEC)
+
+        ndef_msg_hex = "D1010D55046578616D706C652E636F6D2F"
+
+        _LOG.info("Step 3: Triggering async NDEF write from snippet...")
+        write_handler = self.emulator.nfc_emulator.asyncWriteNdefMessage("NdefWriteComplete", ndef_msg_hex)
+
+        _LOG.info("Step 5: Waiting for write completion events...")
+        write_event = write_handler.waitAndGet("NdefWriteComplete", timeout=10.0)
+        listen_thread.join()
+
+        asserts.assert_is_not_none(
+            write_event,
+            "Android failed to complete the NDEF write operation or snippet timed out."
+        )
+
+        _LOG.info("Step 6: Verifying NDEF payload consistency on Python side...")
+        asserts.assert_equal(
+            tag.ndef_file_buffer[2:],
+            bytearray.fromhex(ndef_msg_hex),
+            "Python side tag buffer does not match sent NDEF message"
+        )
+
+        length = int.from_bytes(tag.ndef_file_buffer[0:2], 'big')
+        written_bytes = tag.ndef_file_buffer[2 : 2 + length]
+        expected_bytes = bytearray.fromhex(ndef_msg_hex)
+
+        _LOG.info("Expected NDEF payload: %s", expected_bytes.hex())
+        _LOG.info("Actual Type4Tag payload: %s", written_bytes.hex())
+
+        asserts.assert_equal(
+            written_bytes,
+            expected_bytes,
+            "Verification failed: Type4Tag written buffer does not match expected payload."
+        )
 
 if __name__ == '__main__':
     # Take test args

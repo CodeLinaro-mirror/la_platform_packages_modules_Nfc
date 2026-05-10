@@ -174,6 +174,7 @@ static bool sIsShuttingDown = false;
 #define DEFAULT_DISCOVERY_DURATION 500
 #define READER_MODE_DISCOVERY_DURATION 200
 #define FLAG_SET_DEFAULT_TECH 0x40000000
+#define DEFAULT_MAX_POLLING_WAIT_TIME 5000
 
 static void nfaConnectionCallback(uint8_t event, tNFA_CONN_EVT_DATA* eventData);
 static void nfaDeviceManagementCallback(uint8_t event,
@@ -198,6 +199,7 @@ tNFA_STATUS gVSCmdStatus = NFA_STATUS_OK;
 uint16_t gCurrentConfigLen;
 uint8_t gConfig[256];
 std::vector<uint8_t> gCaps(0);
+std::vector<uint8_t> defaultFrame;
 
 // sPrevScreenStateMask contains screen state + polling enable/disable mask
 //  Possible screen states:
@@ -461,6 +463,22 @@ static void nfaConnectionCallback(uint8_t connEvent,
 
     case NFA_ACTIVATED_EVT:  // NFC link/protocol activated
     {
+      // Check whether this is a proprietary rf interface to be ignored.
+      // If so shouldn't be processed by libnfc as prop module handles
+      // the processing. Otherwise continue normal processing.
+      if (NfcConfig::hasKey(NAME_PROP_RF_IFACE_LIST)) {
+        std::vector<uint8_t> ignorePropIntfs =
+            NfcConfig::getBytes(NAME_PROP_RF_IFACE_LIST);
+        if (std::find(ignorePropIntfs.begin(), ignorePropIntfs.end(),
+                      eventData->activated.activate_ntf.intf_param.type) !=
+            ignorePropIntfs.end()) {
+          LOG(INFO) << StringPrintf(
+              "%s: NFA_ACTIVATED_EVT: Prop Rf iface %02X found in ignore list, "
+              "returning",
+              __func__, eventData->activated.activate_ntf.intf_param.type);
+          break;
+        }
+      }
       bool notListen = !isListenMode(eventData->activated);
       LOG(DEBUG) << StringPrintf(
           "%s: NFA_ACTIVATED_EVT: gIsSelectingRfInterface=%d, sIsDisabling=%d",
@@ -547,8 +565,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
     } break;
     case NFA_DEACTIVATED_EVT:  // NFC link/protocol deactivated
       LOG(DEBUG) << StringPrintf(
-          "%s: NFA_DEACTIVATED_EVT   Type=%u, gIsTagDeactivating=%d", __func__,
-          eventData->deactivated.type, gIsTagDeactivating);
+          "%s: NFA_DEACTIVATED_EVT   Type=%u, gIsTagDeactivating=%d, "
+          "gIsSelectingRfInterface=%d",
+          __func__, eventData->deactivated.type, gIsTagDeactivating,
+          gIsSelectingRfInterface);
       NfcTag::getInstance().setDeactivationState(eventData->deactivated);
 
       if (eventData->deactivated.type != NFA_DEACTIVATE_TYPE_SLEEP) {
@@ -1280,37 +1300,41 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
                             (jint)param_len, dataJavaArray.get());
         } break;
         case NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF: {
-          LOG(INFO) << "Observe mode suspended NTF received";
+          LOG(INFO) << StringPrintf("%s: Observe mode suspended NTF received",
+                                    __func__);
           gObserveModeEnabled = false;
           struct nfc_jni_native_data* nat = getNative(NULL, NULL);
           if (!nat) {
-              LOG(ERROR) << StringPrintf("cached nat is null");
-              return;
+            LOG(ERROR) << StringPrintf("%s: cached nat is null", __func__);
+            return;
           }
           JNIEnv* e = NULL;
           ScopedAttach attach(nat->vm, &e);
           if (e == NULL) {
-              LOG(ERROR) << StringPrintf("jni env is null");
-              return;
+            LOG(ERROR) << StringPrintf("%s: jni env is null", __func__);
+            return;
           }
           if (param_len <= 2) {
-              LOG(ERROR) <<
-                    "Cannot parse exit frame from NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF";
-              return;
+            LOG(ERROR) << StringPrintf(
+                "%s: Cannot parse exit frame from "
+                "NCI_ANDROID_PASSIVE_OBSERVER_SUSPENDED_NTF",
+                __func__);
+            return;
           }
           jint exit_frame_type = (jint) p_param[4];
           uint16_t exit_frame_len = p_param[5];
           ScopedLocalRef<jobject> dataJavaArray(e, e->NewByteArray(exit_frame_len));
           if (dataJavaArray.get() == NULL) {
-              LOG(ERROR) << "fail allocate array";
-              return;
+            LOG(ERROR) << StringPrintf("%s: fail allocate array", __func__);
+            return;
           }
           if (exit_frame_len > 0) {
               e->SetByteArrayRegion((jbyteArray)dataJavaArray.get(), 0, exit_frame_len,
                                     (jbyte*)(p_param + 6));
               if (e->ExceptionCheck()) {
                   e->ExceptionClear();
-                  LOG(ERROR) << "failed to fill array";
+                  LOG(ERROR)
+                      << StringPrintf("%s: failed to fill array", __func__);
                   return;
               }
           }
@@ -1320,18 +1344,19 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
           return;
         } break;
         case NCI_ANDROID_PASSIVE_OBSERVER_RESUMED_NTF: {
-          LOG(INFO) << "Observe mode resumed NTF received";
+          LOG(INFO) << StringPrintf("%s: Observe mode resumed NTF received",
+                                    __func__);
           gObserveModeEnabled = true;
           struct nfc_jni_native_data *nat = getNative(NULL, NULL);
           if (!nat) {
-              LOG(ERROR) << StringPrintf("cached nat is null");
-              return;
+            LOG(ERROR) << StringPrintf("%s: cached nat is null", __func__);
+            return;
           }
           JNIEnv *e = NULL;
           ScopedAttach attach(nat->vm, &e);
           if (e == NULL) {
-              LOG(ERROR) << StringPrintf("jni env is null");
-              return;
+            LOG(ERROR) << StringPrintf("%s: jni env is null", __func__);
+            return;
           }
           e->CallVoidMethod(nat->manager,
                             android::gCachedNfcManagerOnObserveModeEnabledInFirmware);
@@ -1470,12 +1495,14 @@ static jboolean nfcManager_setObserveMode(JNIEnv* e, jobject o,
   if (sIsShuttingDown || sIsRecovering || sIsDisabling || !sIsNfaEnabled)
     return false;
   if (isObserveModeSupported(e, o) == JNI_FALSE) {
-    LOG(DEBUG) << "setObserveMode called when it isn't supported, returning false";
+    LOG(DEBUG) << StringPrintf(
+        "%s: Observe mode not supported, returning false", __func__);
     return false;
   }
 
   if (isObserveModeSupportedWithoutRfDeactivation(e, o) == JNI_FALSE) {
-    LOG(DEBUG) << "setObserveMode called when it requires RF off/on, returning false";
+    LOG(DEBUG) << StringPrintf(
+        "%s: Observe mode requires RF off/on, returning false", __func__);
     return false;
   }
 
@@ -1670,6 +1697,7 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
   initializeGlobalDebugEnabledFlag();
   tNFA_STATUS stat = NFA_STATUS_OK;
   sIsRecovering = false;
+  uint8_t mHostListenTechMask;
 
   struct nfc_jni_native_data* nat = getNative(e, o);
 
@@ -1737,6 +1765,9 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         }
 
         // get LF_T3T_MAX
+        mHostListenTechMask = NfcConfig::getUnsigned(NAME_HOST_LISTEN_TECH_MASK,
+                              NFA_TECHNOLOGY_MASK_A | NFA_TECHNOLOGY_MASK_F);
+        if ((mHostListenTechMask & NFA_TECHNOLOGY_MASK_F) != 0)
         {
           SyncEventGuard guard(gNfaGetConfigEvent);
           tNFA_PMID configParam[1] = {NCI_PARAM_ID_LF_T3T_MAX};
@@ -1939,8 +1970,10 @@ static void nfcManager_enableDiscovery(
               extra_annotationBytes.size());
         }
       } else {
-        uint8_t ignoreFrame[] = {0x6a, 0x01, 0xcf, 0x00, 0x00};
-        setTechAPollingLoopAnnotation(e, 0, ignoreFrame, 5, NULL, 0);
+        LOG(DEBUG) << StringPrintf("%s: applying defaultFrame, size: %zu",
+                                   __func__, defaultFrame.size());
+        setTechAPollingLoopAnnotation(e, o, defaultFrame.data(),
+                                      defaultFrame.size(), NULL, 0);
       }
     }
     startPolling_rfDiscoveryDisabled(tech_mask);
@@ -2116,8 +2149,10 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
 
     tNFA_STATUS stat = NFA_Disable(!sIsRecovering);
     if (stat == NFA_STATUS_OK) {
+      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
+          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
       LOG(DEBUG) << StringPrintf("%s: wait for completion", __func__);
-      if (!sNfaDisableEvent.wait(5000)) {
+      if (!sNfaDisableEvent.wait(max_polling_wait_time)) {
         LOG(ERROR) << StringPrintf(
             "%s: NFA_Disable() timeout, keep disabling anyway", __func__);
       }
@@ -2387,7 +2422,9 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
                                  __FUNCTION__, status);
       return;
     } else {
-      if (!sNfaSetPowerSubState.wait(5000)) {
+      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
+          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
+      if (!sNfaSetPowerSubState.wait(max_polling_wait_time)) {
         LOG(ERROR) << StringPrintf(
             "%s: Wait for NFA_SetPowerSubStateForScreenState timeout",
             __func__);
@@ -2453,15 +2490,21 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
       LOG(ERROR) << StringPrintf("%s: fail enable SetScreenState; error=0x%X",
                                  __FUNCTION__, status);
     } else {
-      if (!sNfaSetPowerSubState.wait(5000)) {
+      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
+          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
+      if (!sNfaSetPowerSubState.wait(max_polling_wait_time)) {
         LOG(ERROR) << StringPrintf(
             "%s: Wait for NFA_SetPowerSubStateForScreenState timeout",
             __func__);
 
-        nfaDeviceManagementCallback(NFA_DM_NFCC_TIMEOUT_EVT, nullptr);
-        return;
+        status = NFA_STATUS_TIMEOUT;
       }
     }
+  }
+
+  if (status == NFA_STATUS_TIMEOUT) {
+    nfaDeviceManagementCallback(NFA_DM_NFCC_TIMEOUT_EVT, nullptr);
+    return;
   }
 
   // skip remaining SetScreenState tasks when trying to silent recover NFCC
@@ -2758,8 +2801,10 @@ static void nfcManager_setDiscoveryTech(JNIEnv* e, jobject o, jint pollTech,
 
   if (nfaStat == NFA_STATUS_OK) {
     // wait for NFA_LISTEN_DISABLED_EVT
+    int16_t max_polling_wait_time = NfcConfig::getUnsigned(
+        NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
     LOG(DEBUG) << StringPrintf("%s: wait for completion", __func__);
-    if (!sNfaEnableDisablePollingEvent.wait(5000)) {
+    if (!sNfaEnableDisablePollingEvent.wait(max_polling_wait_time)) {
       LOG(ERROR) << StringPrintf("%s: wait for NFA_LISTEN_DISABLED_EVT timeout",
                                  __func__);
     }
@@ -2962,6 +3007,30 @@ static jbyteArray nfcManager_doGetRfDiscoverConfig(JNIEnv* e, jobject o) {
   return rtJavaArray;
 }
 
+/*******************************************************************************
+**
+** Function:        nfcManager_doSetDefaultFrame
+**
+** Description:     Set default frame content
+**                  e: JVM environment.
+**                  o: Java object.
+**                  frame: default frame content.
+**
+** Returns:         None
+**
+*******************************************************************************/
+static void nfcManager_doSetDefaultFrame(JNIEnv* e, jobject o,
+                                         jbyteArray frame) {
+  LOG(DEBUG) << StringPrintf("%s: enter", __func__);
+  if (frame != NULL) {
+    ScopedByteArrayRO bytes(e, frame);
+    defaultFrame.assign((const uint8_t*)bytes.get(),
+                        (const uint8_t*)bytes.get() + bytes.size());
+  } else {
+    defaultFrame.clear();
+  }
+}
+
 /*****************************************************************************
 **
 ** JNI functions for android-4.0.1_r1
@@ -3072,6 +3141,7 @@ static JNINativeMethod gMethods[] = {
     {"doRestartRfDiscovery", "()V", (void*)nfcManager_restartRfDiscovery},
     {"setNciConfig", "(I[BIZ)V", (void*)nfcManager_setNciConfig},
     {"getRfDiscoverConfig", "()[B", (void*)nfcManager_doGetRfDiscoverConfig},
+    {"doSetDefaultFrame", "([B)V", (void*)nfcManager_doSetDefaultFrame},
 };
 
 /*******************************************************************************
@@ -3108,8 +3178,10 @@ void startRfDiscovery(bool isStart) {
     SyncEventGuard guard(sNfaEnableDisablePollingEvent);
     status = isStart ? NFA_StartRfDiscovery() : NFA_StopRfDiscovery();
     if (!sIsRecovering && status == NFA_STATUS_OK) {
+      int16_t max_polling_wait_time = NfcConfig::getUnsigned(
+          NAME_MAX_POLLING_WAIT_TIME, DEFAULT_MAX_POLLING_WAIT_TIME);
       LOG(DEBUG) << StringPrintf("%s: Wait for completion timeout", __func__);
-      if (!sNfaEnableDisablePollingEvent.wait(5000)) {
+      if (!sNfaEnableDisablePollingEvent.wait(max_polling_wait_time)) {
         LOG(ERROR) << StringPrintf(
             "%s: Wait for NFA_RF_DISCOVERY_xxxx_EVT timeout. Restart NFC "
             "service...",
