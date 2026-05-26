@@ -68,6 +68,7 @@ import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 import com.android.nfc.PerfettoTrigger;
+import com.android.nfc.ScreenStateHelper;
 import com.android.nfc.cardemulation.RegisteredAidCache.AidResolveInfo;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.flags.Flags;
@@ -146,6 +147,7 @@ public class HostEmulationManager {
     final PowerManager.WakeLock mWakeLock;
     private final Looper mLooper;
     final DeviceConfigFacade mDeviceConfig;
+    final ScreenStateHelper mScreenStateHelper;
 
     @Nullable
     private final StatsdUtils mStatsdUtils;
@@ -357,6 +359,7 @@ public class HostEmulationManager {
         mPollingLoopFilters = new HashMap<Integer, Map<String, List<ApduServiceInfo>>>();
         mPollingLoopPatternFilters = new HashMap<Integer, Map<Pattern, List<ApduServiceInfo>>>();
         mDeviceConfig = nfcInjector.getDeviceConfigFacade();
+        mScreenStateHelper = nfcInjector.getScreenStateHelper();
 
         mHandler.postDelayed(mUnbindInactiveServicesRunnable, UNBIND_SERVICES_DELAY_MS);
     }
@@ -595,6 +598,13 @@ public class HostEmulationManager {
             mHandler.removeCallbacks(mAutoDisableObserveModeRunnable);
             mAutoDisableObserveModeRunnable = null;
         }
+    }
+
+    private boolean isScreenOn() {
+        boolean checkDisplayState = mDeviceConfig.getCheckDisplayStateForScreenState();
+        int screenState = mScreenStateHelper.checkScreenState(checkDisplayState);
+        return screenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED
+                || screenState == ScreenStateHelper.SCREEN_STATE_ON_LOCKED;
     }
 
     void onNfcFHostEmulationActivated() {
@@ -962,7 +972,7 @@ public class HostEmulationManager {
                     if (selectAid.equals(NDEF_V1_AID) || selectAid.equals(NDEF_V2_AID)) {
                         Log.w(TAG,
                                 "onHostEmulationData: Can't route NDEF AID, sending AID_NOT_FOUND");
-                    } else if (!mPowerManager.isScreenOn()) {
+                    } else if (!isScreenOn()) {
                       Log.i(TAG,
                               "onHostEmulationData: Screen is off, sending AID_NOT_FOUND, "
                                       + "but not triggering bug report");
@@ -1005,7 +1015,7 @@ public class HostEmulationManager {
                         launchTapAgain(resolveInfo.defaultService, resolveInfo.category);
                         return;
                     }
-                    if (defaultServiceInfo.requiresScreenOn() && !mPowerManager.isScreenOn()) {
+                    if (defaultServiceInfo.requiresScreenOn() && !isScreenOn()) {
                         NfcService.getInstance().sendData(AID_NOT_FOUND);
                         if (DBG) Log.d(TAG, "onHostEmulationData: requiresScreenOn()!");
                         if (mStatsdUtils != null) {
@@ -1296,6 +1306,7 @@ public class HostEmulationManager {
                     if (nfcHceLatencyEvents()) {
                         Trace.endAsyncSection(EVENT_HCE_BIND_SERVICE, 0);
                     }
+                    mContext.unbindService(connection);
                     Log.e(TAG, "bindServiceIfNeededLocked: Could not bind service");
                 }
             } catch (SecurityException e) {
@@ -1470,6 +1481,7 @@ public class HostEmulationManager {
                 if (nfcHceLatencyEvents()) {
                     Trace.endAsyncSection(EVENT_HCE_BIND_PAYMENT_SERVICE, 0);
                 }
+                mContext.unbindService(mPaymentConnection);
                 Log.e(TAG, "bindPaymentServiceLocked: Could not bind (persistent) "
                         + "payment service");
             }
@@ -1781,6 +1793,13 @@ public class HostEmulationManager {
                                 preferredUserAndService.getComponentName();
                 /* Service is already deactivated and not preferred, don't bind */
                 if (mState.get() == STATE_IDLE && !name.equals(preferredServiceName)) {
+                    try {
+                        mContext.unbindService(this);
+                    } catch (IllegalArgumentException e) {
+                        Log.w(TAG, "Failed to unbind " + name, e);
+                    }
+                    mComponentNameToConnectionsMap.remove(
+                            new ComponentNameAndUser(mUserId, name));
                     return;
                 }
                 Messenger messenger = new Messenger(service);
