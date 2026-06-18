@@ -1619,6 +1619,29 @@ public class HostEmulationManager {
                                     .build())
                             .build());
         }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
+            }
+
+            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPaymentServiceBindState(
+                                NfcEventProto.NfcPaymentServiceBindState.newBuilder()
+                                    .setBindState(NfcEventProto.BindState.SERVICE_NULL_BINDING)
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                name.getPackageName())
+                                            .setClassName(
+                                                name.getClassName())
+                                            .build())
+                                    .build())
+                            .build());
+        }
     };
 
     class HostEmulationServiceConnection implements ServiceConnection {
@@ -1637,6 +1660,13 @@ public class HostEmulationManager {
                                 preferredUserAndService.getComponentName();
                 /* Service is already deactivated and not preferred, don't bind */
                 if (mState == STATE_IDLE && !name.equals(preferredServiceName)) {
+                    try {
+                        mContext.unbindService(this);
+                    } catch (IllegalArgumentException e) {
+                        Log.w(TAG, "Failed to unbind " + name, e);
+                    }
+                    mComponentNameToConnectionsMap.remove(
+                            new ComponentNameAndUser(mUserId, name));
                     return;
                 }
                 Messenger messenger = new Messenger(service);
@@ -1707,6 +1737,20 @@ public class HostEmulationManager {
                     mServiceName = null;
                     mServiceBound = false;
                 }
+            }
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.i(TAG, "onBindingDied: " + name);
+            unbindServiceIfNeededLocked();
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
             }
         }
     };
