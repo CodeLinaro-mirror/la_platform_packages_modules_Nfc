@@ -105,6 +105,7 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
@@ -1762,6 +1763,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.isPresent()).thenReturn(true);
         when(tagEndpoint.connect(anyInt())).thenReturn(true);
@@ -1775,6 +1778,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.isPresent()).thenReturn(true);
         when(tagEndpoint.reconnect()).thenReturn(true);
@@ -1788,6 +1793,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.formatNdef(any())).thenReturn(true);
         mNfcService.mObjectMap.put(1, tagEndpoint);
@@ -1800,6 +1807,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.getUid()).thenReturn(new byte[]{4, 18, 52, 86});
         when(tagEndpoint.getTechList()).thenReturn(new int[]{Ndef.NDEF});
@@ -1829,6 +1838,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.getTechList()).thenReturn(new int[]{Ndef.NDEF, Ndef.TYPE_OTHER});
         mNfcService.mObjectMap.put(1, tagEndpoint);
@@ -1849,6 +1860,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.checkNdef(any())).thenReturn(true);
         mNfcService.mObjectMap.put(1, tagEndpoint);
@@ -1861,6 +1874,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.isPresent()).thenReturn(true);
         mNfcService.mObjectMap.put(1, tagEndpoint);
@@ -1881,6 +1896,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         when(tagEndpoint.makeReadOnly()).thenReturn(true);
         mNfcService.mObjectMap.put(1, tagEndpoint);
@@ -1893,6 +1910,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
         NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
@@ -1908,6 +1927,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
         NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
@@ -1938,6 +1959,8 @@ public final class NfcServiceTest {
         NfcService.TagService tagService = mNfcService.new TagService();
         mNfcService.mState = NfcAdapter.STATE_ON;
         mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        mNfcService.mDispatchedUid = Process.INVALID_UID;
         DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
         NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
         NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
@@ -1950,6 +1973,37 @@ public final class NfcServiceTest {
         TransceiveResult result = tagService.transceive(1, ndefMessage
                 .toByteArray(), true);
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    public void testTagService_unauthorizedCallingUid_blocksTagOperations() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        mNfcService.mCookieUpToDate = 12345L;
+        // Ensure mDispatchedUid is guaranteed to be different from Binder.getCallingUid()
+        mNfcService.mDispatchedUid = Binder.getCallingUid() + 100;
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.isPresent()).thenReturn(true);
+        when(tagEndpoint.connect(anyInt())).thenReturn(true);
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+
+        // Current calling process UID (different from 10001) will be blocked
+        assertThat(tagService.connect(1, Ndef.TYPE_1)).isEqualTo(ErrorCodes.ERROR_DISCONNECT);
+        assertThat(tagService.reconnect(1)).isEqualTo(ErrorCodes.ERROR_DISCONNECT);
+        assertThat(tagService.getTechList(1)).isNull();
+        assertThat(tagService.isPresent(1)).isFalse();
+        assertThat(tagService.isNdef(1)).isFalse();
+        assertThat(tagService.transceive(1, new byte[]{0x00}, true)).isNull();
+        assertThat(tagService.ndefRead(1)).isNull();
+
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        assertThat(tagService.ndefWrite(1, ndefMessage)).isEqualTo(ErrorCodes.ERROR_IO);
+        assertThat(tagService.ndefMakeReadOnly(1)).isEqualTo(ErrorCodes.ERROR_IO);
+        assertThat(tagService.formatNdef(1, "test".getBytes())).isEqualTo(ErrorCodes.ERROR_IO);
+        assertThat(tagService.rediscover(1)).isNull();
     }
 
     @Test
