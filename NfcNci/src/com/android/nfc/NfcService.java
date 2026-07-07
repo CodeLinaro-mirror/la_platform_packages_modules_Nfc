@@ -5985,7 +5985,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
                     mPrefsEditor = mPrefs.edit();
                     mPrefsEditor.putBoolean(PREF_MIGRATE_TO_DE_COMPLETE, true);
-                    mPrefsEditor.apply();
                     // Read the shared prefs again to determine if NFC should
                     // be enabled or disabled.
                     reinitializeAfterDeMigration();
@@ -5999,18 +5998,33 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 new EnableDisableTask().execute(TASK_DISABLE);
             }
             String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(mUserId);
-            if (mUserId == UserHandle.SYSTEM.getIdentifier()
-                    && !mPrefs.contains(PREF_SECURE_NFC_ON + "_"
-                            + UserHandle.SYSTEM.getIdentifier())) {
-                mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
-                        mDeviceConfigFacade.getDefaultSecureNfcState())
-                        && mIsSecureNfcCapable;
-            } else {
-                mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
-                        mDeviceConfigFacade.getDefaultSecureNfcState())
-                        && mIsSecureNfcCapable;
+            synchronized (NfcService.this) {
+                if (mUserId == UserHandle.SYSTEM.getIdentifier()
+                        && !mPrefs.contains(PREF_SECURE_NFC_ON + "_"
+                                + UserHandle.SYSTEM.getIdentifier())) {
+                    mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
+                            mDeviceConfigFacade.getDefaultSecureNfcState())
+                            && mIsSecureNfcCapable;
+                } else {
+                    mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
+                            mDeviceConfigFacade.getDefaultSecureNfcState())
+                            && mIsSecureNfcCapable;
+                }
+
+                mPrefsEditor.putBoolean(secureNfcPreferenceKey, mIsSecureNfcEnabled);
+                mPrefsEditor.apply();
+                mBackupManager.dataChanged();
+
+                mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
+
+                if (mIsHceCapable) {
+                    // update HCE/HCEF routing and commitRouting if Nfc is enabled
+                    mCardEmulationManager.onTriggerRoutingTableUpdate();
+                } else if (isNfcEnabled()) {
+                    // commit only tech/protocol route without HCE support
+                    mDeviceHost.commitRouting();
+                }
             }
-            mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
         }
     };
 
