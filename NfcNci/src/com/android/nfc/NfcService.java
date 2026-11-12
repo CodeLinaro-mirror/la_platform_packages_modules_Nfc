@@ -1329,6 +1329,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mForegroundUtils = mNfcInjector.getForegroundUtils();
         mIsSecureNfcCapable = mIsHceCapable && mDeviceConfigFacade.isSecureNfcCapable();
         String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(mUserId);
+        if (mUserId == UserHandle.SYSTEM.getIdentifier() && mPrefs.contains(PREF_SECURE_NFC_ON)) {
+            boolean oldSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
+                    mDeviceConfigFacade.getDefaultSecureNfcState())
+                    && mIsSecureNfcCapable;
+            mPrefsEditor.putBoolean(secureNfcPreferenceKey, oldSecureNfcEnabled);
+            mPrefsEditor.remove(PREF_SECURE_NFC_ON);
+            mPrefsEditor.apply();
+            Log.i(TAG, "OTA Migration: Successfully migrated legacy PREF_SECURE_NFC_ON ("
+                + oldSecureNfcEnabled + ") to " + secureNfcPreferenceKey + " and removed old key.");
+        }
         mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
             mDeviceConfigFacade.getDefaultSecureNfcState())
             && mIsSecureNfcCapable;
@@ -2679,6 +2689,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean isNfcSecureEnabled() throws RemoteException {
             synchronized (NfcService.this) {
+                int current_userId = ActivityManager.getCurrentUser();
+                if (mUserId != current_userId) {
+                    loadSecureNfcSettings(current_userId);
+                }
                 return mIsSecureNfcEnabled;
             }
         }
@@ -6316,9 +6330,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 new EnableDisableTask().execute(TASK_DISABLE);
             }
             String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(mUserId);
-            mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
-                    mDeviceConfigFacade.getDefaultSecureNfcState())
-                    && mIsSecureNfcCapable;
+            if (mUserId == UserHandle.SYSTEM.getIdentifier()
+                    && !mPrefs.contains(PREF_SECURE_NFC_ON + "_"
+                            + UserHandle.SYSTEM.getIdentifier())) {
+                mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
+                        mDeviceConfigFacade.getDefaultSecureNfcState())
+                        && mIsSecureNfcCapable;
+            } else {
+                mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
+                        mDeviceConfigFacade.getDefaultSecureNfcState())
+                        && mIsSecureNfcCapable;
+            }
             mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
         }
     };
