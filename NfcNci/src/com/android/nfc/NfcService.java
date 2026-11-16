@@ -507,6 +507,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     // for recording the latest Tag object cookie
     long mCookieUpToDate = -1;
+    int mDispatchedUid = Process.INVALID_UID;
 
     private DeviceConfigFacade mDeviceConfigFacade;
     private NfcDispatcher mNfcDispatcher;
@@ -1090,6 +1091,35 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
 
+
+    /**
+     * Returns the SharedPreferences key for the Secure NFC setting for a specific user.
+     * @param userId The user ID.
+     * @return The user-specific preference key.
+     */
+    private String getSecureNfcPreferenceKeyForUser(int userId) {
+        return PREF_SECURE_NFC_ON + "_" + userId;
+    }
+
+    /**
+     * Loads the Secure NFC setting for the given user.
+     * @param userId The user ID for which to load the settings.
+     */
+    private void loadSecureNfcSettings(int userId) {
+        String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(userId);
+        // Get the user-specific preference.
+        // Fall back to the device's default setting if not found.
+        mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
+                mDeviceConfigFacade.getDefaultSecureNfcState())
+                && mIsSecureNfcCapable;
+
+        Log.i(TAG, "Reloaded Secure NFC setting for user "
+                + userId + ". Enabled: " + mIsSecureNfcEnabled);
+
+        // Apply the newly loaded setting to the NFC controller
+        mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
+    }
+
     /** Returns true if NFC has user restriction set. */
     private boolean isNfcUserRestricted() {
         return mUserManager.getUserRestrictions().getBoolean(
@@ -1298,8 +1328,19 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsEuiccCapable = mContext.getResources().getBoolean(R.bool.enable_euicc_support)
                 && NfcInjector.NfcProperties.isEuiccSupported();
         mForegroundUtils = mNfcInjector.getForegroundUtils();
-        mIsSecureNfcCapable = mDeviceConfigFacade.isSecureNfcCapable();
-        mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
+        mIsSecureNfcCapable = mIsHceCapable && mDeviceConfigFacade.isSecureNfcCapable();
+        String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(mUserId);
+        if (mUserId == UserHandle.SYSTEM.getIdentifier() && mPrefs.contains(PREF_SECURE_NFC_ON)) {
+            boolean oldSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
+                    mDeviceConfigFacade.getDefaultSecureNfcState())
+                    && mIsSecureNfcCapable;
+            mPrefsEditor.putBoolean(secureNfcPreferenceKey, oldSecureNfcEnabled);
+            mPrefsEditor.remove(PREF_SECURE_NFC_ON);
+            mPrefsEditor.apply();
+            Log.i(TAG, "OTA Migration: Successfully migrated legacy PREF_SECURE_NFC_ON ("
+                + oldSecureNfcEnabled + ") to " + secureNfcPreferenceKey + " and removed old key.");
+        }
+        mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
             mDeviceConfigFacade.getDefaultSecureNfcState())
             && mIsSecureNfcCapable;
         mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
@@ -2649,6 +2690,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean isNfcSecureEnabled() throws RemoteException {
             synchronized (NfcService.this) {
+                int current_userId = ActivityManager.getCurrentUser();
+                if (mUserId != current_userId) {
+                    loadSecureNfcSettings(current_userId);
+                }
                 return mIsSecureNfcEnabled;
             }
         }
@@ -2668,7 +2713,18 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     return false;
                 }
                 Log.i(TAG, "setNfcSecure: " + enable);
-                mPrefsEditor.putBoolean(PREF_SECURE_NFC_ON, enable);
+                final int currentUserId = getUserId();
+                final String secureNfcPreferenceKey =
+                        getSecureNfcPreferenceKeyForUser(currentUserId);
+                mPrefsEditor.putBoolean(secureNfcPreferenceKey, enable);
+                Log.i(TAG, "currentUserId: " + currentUserId);
+                // If the change is made by the Primary User (SYSTEM), use the setting
+                // as new default.
+                // Check for System User ID
+                if (currentUserId == UserHandle.SYSTEM.getIdentifier()) {
+                    mDeviceConfigFacade.setDefaultSecureNfcState(enable);
+                }
+
                 mPrefsEditor.apply();
                 mIsSecureNfcEnabled = enable;
                 mBackupManager.dataChanged();
@@ -3951,9 +4007,27 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     final class TagService extends INfcTag.Stub {
+        private boolean isTagAccessAllowed() {
+            if (mCookieUpToDate == -1) {
+                return false;
+            }
+            int callingUid = Binder.getCallingUid();
+            if (mDispatchedUid != Process.INVALID_UID && mDispatchedUid != callingUid) {
+                if (DBG) {
+                    Log.d(TAG, "Tag access denied for UID " + callingUid + ", active UID is "
+                            + mDispatchedUid);
+                }
+                return false;
+            }
+            return true;
+        }
+
         @Override
         public int connect(int nativeHandle, int technology) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
+            if (!isTagAccessAllowed()) {
+                return ErrorCodes.ERROR_DISCONNECT;
+            }
 
             TagEndpoint tag = null;
 
@@ -3992,6 +4066,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int reconnect(int nativeHandle) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
+            if (!isTagAccessAllowed()) {
+                return ErrorCodes.ERROR_DISCONNECT;
+            }
 
             TagEndpoint tag = null;
 
@@ -4025,15 +4102,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             NfcPermissions.enforceUserPermissions(mContext);
 
             // Check if NFC is enabled
-            if (!isNfcEnabled()) {
-                return null;
-            }
-
-            if (!isReaderOptionEnabled()) {
-                return null;
-            }
-
-            if (checkAndHandleRemovalDetectionMode(true)) {
+            if (!isNfcEnabled()
+                    || !isTagAccessAllowed()
+                    || !isReaderOptionEnabled()
+                    || checkAndHandleRemovalDetectionMode(true)) {
                 return null;
             }
 
@@ -4047,23 +4119,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean isPresent(int nativeHandle) throws RemoteException {
-            TagEndpoint tag = null;
-
             // Check if NFC is enabled
-            if (!isNfcEnabled()) {
-                return false;
-            }
-
-            if (!isReaderOptionEnabled()) {
-                return false;
-            }
-
-            if (checkAndHandleRemovalDetectionMode(true)) {
+            if (!isNfcEnabled()
+                    || !isTagAccessAllowed()
+                    || !isReaderOptionEnabled()
+                    || checkAndHandleRemovalDetectionMode(true)) {
                 return false;
             }
 
             /* find the tag in the hmap */
-            tag = (TagEndpoint) findObject(nativeHandle);
+            TagEndpoint tag = (TagEndpoint) findObject(nativeHandle);
             if (tag == null) {
                 return false;
             }
@@ -4075,23 +4140,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public boolean isNdef(int nativeHandle) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
 
-            TagEndpoint tag = null;
-
             // Check if NFC is enabled
-            if (!isNfcEnabled()) {
-                return false;
-            }
-
-            if (!isReaderOptionEnabled()) {
-                return false;
-            }
-
-            if (checkAndHandleRemovalDetectionMode(true)) {
+            if (!isNfcEnabled()
+                    || !isTagAccessAllowed()
+                    || !isReaderOptionEnabled()
+                    || checkAndHandleRemovalDetectionMode(true)) {
                 return false;
             }
 
             /* find the tag in the hmap */
-            tag = (TagEndpoint) findObject(nativeHandle);
+            TagEndpoint tag = (TagEndpoint) findObject(nativeHandle);
             int[] ndefInfo = new int[2];
             if (tag == null) {
                 return false;
@@ -4104,31 +4162,23 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
 
-            TagEndpoint tag = null;
-            byte[] response;
-
             // Check if NFC is enabled
-            if (!isNfcEnabled()) {
-                return null;
-            }
-
-            if (!isReaderOptionEnabled()) {
-                return null;
-            }
-
-            if (checkAndHandleRemovalDetectionMode(true)) {
+            if (!isNfcEnabled()
+                    || !isTagAccessAllowed()
+                    || !isReaderOptionEnabled()
+                    || checkAndHandleRemovalDetectionMode(true)) {
                 return null;
             }
 
             /* find the tag in the hmap */
-            tag = (TagEndpoint) findObject(nativeHandle);
+            TagEndpoint tag = (TagEndpoint) findObject(nativeHandle);
             if (tag != null) {
                 // Check if length is within limits
                 if (data.length > getMaxTransceiveLength(tag.getConnectedTechnology())) {
                     return new TransceiveResult(TransceiveResult.RESULT_EXCEEDED_LENGTH, null);
                 }
                 int[] targetLost = new int[1];
-                response = tag.transceive(data, raw, targetLost);
+                byte[] response = tag.transceive(data, raw, targetLost);
                 int result;
                 if (response != null) {
                     result = TransceiveResult.RESULT_SUCCESS;
@@ -4146,23 +4196,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public NdefMessage ndefRead(int nativeHandle) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
 
-            TagEndpoint tag;
-
             // Check if NFC is enabled
-            if (!isNfcEnabled()) {
-                return null;
-            }
-
-            if (!isReaderOptionEnabled()) {
-                return null;
-            }
-
-            if (checkAndHandleRemovalDetectionMode(true)) {
+            if (!isNfcEnabled()
+                    || !isTagAccessAllowed()
+                    || !isReaderOptionEnabled()
+                    || checkAndHandleRemovalDetectionMode(true)) {
                 return null;
             }
 
             /* find the tag in the hmap */
-            tag = (TagEndpoint) findObject(nativeHandle);
+            TagEndpoint tag = (TagEndpoint) findObject(nativeHandle);
             if (tag != null) {
                 byte[] buf = tag.readNdef();
                 if (buf == null) {
@@ -4182,6 +4225,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int ndefWrite(int nativeHandle, NdefMessage msg) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
+            if (!isTagAccessAllowed()) {
+                return ErrorCodes.ERROR_IO;
+            }
 
             TagEndpoint tag;
 
@@ -4225,6 +4271,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int ndefMakeReadOnly(int nativeHandle) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
+            if (!isTagAccessAllowed()) {
+                return ErrorCodes.ERROR_IO;
+            }
 
             TagEndpoint tag;
 
@@ -4257,6 +4306,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int formatNdef(int nativeHandle, byte[] key) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
+            if (!isTagAccessAllowed()) {
+                return ErrorCodes.ERROR_IO;
+            }
 
             TagEndpoint tag;
 
@@ -4290,23 +4342,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public Tag rediscover(int nativeHandle) throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
 
-            TagEndpoint tag = null;
-
             // Check if NFC is enabled
-            if (!isNfcEnabled()) {
-                return null;
-            }
-
-            if (!isReaderOptionEnabled()) {
-                return null;
-            }
-
-            if (checkAndHandleRemovalDetectionMode(true)) {
+            if (!isNfcEnabled()
+                    || !isTagAccessAllowed()
+                    || !isReaderOptionEnabled()
+                    || checkAndHandleRemovalDetectionMode(true)) {
                 return null;
             }
 
             /* find the tag in the hmap */
-            tag = (TagEndpoint) findObject(nativeHandle);
+            TagEndpoint tag = (TagEndpoint) findObject(nativeHandle);
             if (tag != null) {
                 // For now the prime usecase for rediscover() is to be able
                 // to access the NDEF technology after formatting without
@@ -5319,6 +5364,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 @Override
                                 public void onTagDisconnected() {
                                     mCookieUpToDate = -1;
+                                    mDispatchedUid = Process.INVALID_UID;
                                     clearAppInactivityDetectionContext();
                                     executeOemOnTagConnectedCallback(false);
                                     applyRouting(false);
@@ -5965,6 +6011,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             playSound(SOUND_END);
                         }
                         if (readerParams.callback != null) {
+                            mDispatchedUid = readerParams.uid;
                             if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
                                 mPowerManager.userActivity(SystemClock.uptimeMillis(),
                                         PowerManager.USER_ACTIVITY_EVENT_OTHER, 0);
@@ -5987,6 +6034,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
                 refreshTagDispatcherInProvisionMode();
                 int dispatchResult = mNfcDispatcher.dispatchTag(tag);
+                if (dispatchResult == NfcDispatcher.DISPATCH_FAIL) {
+                    mDispatchedUid = Process.INVALID_UID;
+                }
                 if (dispatchResult == NfcDispatcher.DISPATCH_FAIL
                         && !isEndPointRemovalDetectionSupported()) {
                     if (DBG) Log.d(TAG, "dispatchTagEndpoint: Tag dispatch failed");
@@ -6186,6 +6236,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 if (DBG) Log.d(TAG, action + "mReceiver.onReceive: UserId: " + userId);
                 if (mIsHceCapable) {
                     mCardEmulationManager.onUserSwitched(getUserId());
+                    loadSecureNfcSettings(userId);
                 }
 
                 mNfcInjector.onUserSwitched();
@@ -6259,7 +6310,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
                     mPrefsEditor = mPrefs.edit();
                     mPrefsEditor.putBoolean(PREF_MIGRATE_TO_DE_COMPLETE, true);
-                    mPrefsEditor.apply();
                     // Read the shared prefs again to determine if NFC should
                     // be enabled or disabled.
                     reinitializeAfterDeMigration();
@@ -6273,10 +6323,34 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             } else {
                 new EnableDisableTask().execute(TASK_DISABLE);
             }
-            mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
-                    mDeviceConfigFacade.getDefaultSecureNfcState())
-                    && mIsSecureNfcCapable;
-            mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
+            String secureNfcPreferenceKey = getSecureNfcPreferenceKeyForUser(mUserId);
+            synchronized (NfcService.this) {
+                if (mUserId == UserHandle.SYSTEM.getIdentifier()
+                        && !mPrefs.contains(PREF_SECURE_NFC_ON + "_"
+                                + UserHandle.SYSTEM.getIdentifier())) {
+                    mIsSecureNfcEnabled = mPrefs.getBoolean(PREF_SECURE_NFC_ON,
+                            mDeviceConfigFacade.getDefaultSecureNfcState())
+                            && mIsSecureNfcCapable;
+                } else {
+                    mIsSecureNfcEnabled = mPrefs.getBoolean(secureNfcPreferenceKey,
+                            mDeviceConfigFacade.getDefaultSecureNfcState())
+                            && mIsSecureNfcCapable;
+                }
+
+                mPrefsEditor.putBoolean(secureNfcPreferenceKey, mIsSecureNfcEnabled);
+                mPrefsEditor.apply();
+                mBackupManager.dataChanged();
+
+                mDeviceHost.setNfcSecure(mIsSecureNfcEnabled);
+
+                if (mIsHceCapable) {
+                    // update HCE/HCEF routing and commitRouting if Nfc is enabled
+                    mCardEmulationManager.onTriggerRoutingTableUpdate();
+                } else if (isNfcEnabled()) {
+                    // commit only tech/protocol route without HCE support
+                    mDeviceHost.commitRouting();
+                }
+            }
         }
     };
 
